@@ -2,20 +2,22 @@
 
 #include <iostream>
 
-std::default_random_engine Sampler::sRandomGenerator;
-std::gamma_distribution<double> Sampler::sGammaDistribution = std::gamma_distribution<double>(1, 1);
-double Sampler::sGammaThreshold = 3.0;
-
 Sampler::Sampler(const Quadtree *quadtree, float climbChance, size_t minArcLength)
-	: mParent(this)
-	, mQuadtree(quadtree)
+	: mQuadtree(quadtree)
 	, mClimbChance(climbChance)
 	, mMinArcLength(minArcLength)
+	, mParent(this)
+	, mRoot(this)
 	, mPoints(std::vector<size_t>(numPoints()))
 	, mNumPointsPerAngle(std::vector<size_t>(numAngles(), 0))
 	, mNumEmptyAngles(numAngles())
 	, mNumAvailablePoints(numPoints())
 {
+	boost::mt19937 rng;
+	boost::binomial_distribution<> pointDistribution(numPoints(), 0.1);
+	mRandomPointGenerator = new GENERATOR_TYPE(rng, pointDistribution);
+	boost::binomial_distribution<> angleDistribution(numAngles(), 0.1);
+	mRandomAngleGenerator = new GENERATOR_TYPE(rng, angleDistribution);            
 	for (size_t i = 0; i < numPoints(); i++)
 	{
 		mPoints[i] = i;
@@ -25,16 +27,28 @@ Sampler::Sampler(const Quadtree *quadtree, float climbChance, size_t minArcLengt
 }
 
 Sampler::Sampler(Sampler &parent)
-	: mParent(&parent)
-	, mQuadtree(parent.mQuadtree)
+	: mQuadtree(parent.mQuadtree)
 	, mClimbChance(parent.mClimbChance)
 	, mMinArcLength(parent.mMinArcLength)
+	, mParent(&parent)
+	, mRoot(parent.mRoot)
 	, mPoints(parent.mPoints)
 	, mNumPointsPerAngle(parent.mNumPointsPerAngle)
 	, mNumEmptyAngles(parent.mNumEmptyAngles)
 	, mNumAvailablePoints(parent.mNumAvailablePoints)
+	, mRandomPointGenerator(parent.mRandomPointGenerator)
+	, mRandomAngleGenerator(parent.mRandomAngleGenerator)
 {
+	
+}
 
+Sampler::~Sampler() 
+{
+	if (mParent == this)
+	{
+		delete mRandomPointGenerator;
+		delete mRandomAngleGenerator;
+	}
 }
 
 bool Sampler::canSample() const 
@@ -42,23 +56,30 @@ bool Sampler::canSample() const
 	return (numAngles() - mNumEmptyAngles) > mMinArcLength;
 }
 
-std::pair<size_t, size_t> Sampler::sample(const std::set<size_t> &points) const 
+std::pair<size_t, size_t> Sampler::sample(const std::vector<size_t> &points)  
 {
 	std::pair<size_t, size_t> p;
+	#ifdef _BENCHMARK
+		auto begin = std::chrono::high_resolution_clock::now();
+	#endif 
 	p.first = selectRandomPoint(points);
+	#ifdef _BENCHMARK
+		auto end = std::chrono::high_resolution_clock::now();
+		gTimeSample1 += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+		begin = std::chrono::high_resolution_clock::now();
+	#endif 
 	p.second = selectAnotherRandomPoint(p.first);
+	#ifdef _BENCHMARK
+		end = std::chrono::high_resolution_clock::now();
+		gTimeSample2 += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+	#endif 
 	return p;
-}
-
-bool Sampler::isRemoved(size_t point) const 
-{
-	return mPoints[point] != point;
 }
 
 void Sampler::removePoint(size_t point)
 {
 	if (isRemoved(point)) return;
-	mPoints[point] = selectSubstitutePoint(point);
+	mPoints[point] = selectAnotherRandomPoint(point);
 	if (--mNumPointsPerAngle[normalAngleIndex(point)] == 0)
 		++mNumEmptyAngles;
 	--mNumAvailablePoints;
@@ -71,111 +92,88 @@ void Sampler::removePointFromAll(size_t point)
 		mParent->removePointFromAll(point);
 }
 
-size_t Sampler::getPoint(size_t index) const 
+size_t Sampler::getPoint(size_t index)  
 {
 	if (index == mPoints[index]) return index;
-	return getPoint(mPoints[index]);
+	mPoints[index] = getPoint(mPoints[index]);
+	return mPoints[index];
 }
 
-size_t Sampler::selectRandomPoint(const std::set<size_t> &points) const 
+size_t Sampler::selectRandomPoint(const std::vector<size_t> &points)  
 {
-	if (points.empty() || getProbability() < mClimbChance)
+	if (points.empty())
 	{
-		double value = std::min(sGammaDistribution(sRandomGenerator), sGammaThreshold) / (sGammaThreshold + 0.001);
-		return getPoint(static_cast<size_t>(value * mPoints.size()));
+		return getPoint(getRandomPoint());
 	}
 	else
 	{
-		double value = std::min(sGammaDistribution(sRandomGenerator), sGammaThreshold) / (sGammaThreshold + 0.001);
-		size_t index = static_cast<size_t>(value * points.size());
-		auto it = points.begin();
-		std::advance(it, index);
-		return getPoint(*it);
-	}
-}
-
-bool Sampler::containsValidPoints(const Quadtree *node, size_t firstPoint, size_t angle) const
-{
-	for (const size_t &point : node->points(angle))
-	{
-		if (point != firstPoint && !isRemoved(point))
-			return true;
-	}
-	return false;
-}
-
-size_t Sampler::resolveAngle(const Quadtree *node, size_t firstPoint, size_t angle) const
-{
-	if (containsValidPoints(node, firstPoint, angle)) return angle;
-	size_t clockwiseAngle = angle;
-	size_t counterClockwisewAngle = angle;
-	for (size_t i = 0; i < numAngles() / 2; i++)
-	{
-		clockwiseAngle = increaseOneAngle(clockwiseAngle);
-		if (containsValidPoints(node, firstPoint, clockwiseAngle)) return clockwiseAngle;
-		counterClockwisewAngle = decreaseOneAngle(counterClockwisewAngle);
-		if (containsValidPoints(node, firstPoint, counterClockwisewAngle)) return counterClockwisewAngle;
-	}
-	return std::numeric_limits<size_t>::max();
-}
-
-size_t Sampler::selectSubstitutePoint(size_t firstPoint) const 
-{
-	const Quadtree *node = mQuadtree->findLeaf(firstPoint); 
-	size_t firstAngle = rand() % numAngles();//normalAngleIndex(firstPoint);
-	size_t secondAngle;
-	while (true)
-	{
-		secondAngle = resolveAngle(node, firstPoint, firstAngle);
-		if (secondAngle > numAngles())
+		size_t point = points[rand() % points.size()];
+		size_t angle = normalAngleIndex(point);
+		const Quadtree *node = mQuadtree->findLeaf(point);
+		while (!node->isRoot() && getRandomNumber() < mClimbChance)
 		{
 			node = node->parent();
 		}
-		else
-		{
-			break;
-		}
+		return getPoint(node->points(angle)[rand() % node->points(angle).size()]);
 	}
-	for (const size_t &point : node->points(secondAngle))
+}
+
+size_t Sampler::getValidPoint(const Quadtree *node, size_t firstPoint, size_t angle) 
+{
+	/*for (const size_t &point : node->points(angle))
 	{
 		if (point != firstPoint && !isRemoved(point))
 			return point;
+	}*/
+	if (!node->points(angle).empty())
+	{
+		return getPoint(node->points(angle)[rand() % node->points(angle).size()]);
 	}
 	return std::numeric_limits<size_t>::max();
 }
 
-size_t Sampler::selectAnotherRandomPoint(size_t firstPoint) const 
+size_t Sampler::getNextValidPoint(const Quadtree *node, size_t firstPoint, size_t angle) 
 {
-	const Quadtree *node = mQuadtree->findLeaf(firstPoint); 
-	while (!node->isRoot() && getProbability() < mClimbChance)
+	size_t point = getValidPoint(node, firstPoint, angle);
+	if (point != std::numeric_limits<size_t>::max()) return point;
+	size_t clockwiseAngle = angle;
+	size_t counterClockwiseAngle = angle;
+	for (size_t i = 0; i < numAngles() / 2; i++)
+	{
+		clockwiseAngle = increaseOneAngle(clockwiseAngle);
+		point = getValidPoint(node, firstPoint, clockwiseAngle);
+		if (point != std::numeric_limits<size_t>::max()) return point;
+		counterClockwiseAngle = decreaseOneAngle(counterClockwiseAngle);
+		point = getValidPoint(node, firstPoint, counterClockwiseAngle);
+		if (point != std::numeric_limits<size_t>::max()) return point;
+	}
+	return std::numeric_limits<size_t>::max();
+}
+
+size_t Sampler::selectAnotherRandomPoint(size_t point)  
+{
+	const Quadtree *node = mQuadtree->findLeaf(point); 
+	while (!node->isRoot() && getRandomNumber() < mClimbChance)
 	{
 		node = node->parent();
 	}
-	size_t firstAngle = normalAngleIndex(firstPoint);
-	size_t secondAngle;
-	while (true)
+	size_t angle = selectOppositeAngle(normalAngleIndex(point));
+	size_t anotherPoint;
+	do
 	{
-		std::vector<size_t> angles;
-		angles.reserve(numAngles() * numAngles());
-		for (size_t i = 0; i < numAngles(); i++)
+		#ifdef _BENCHMARK
+			auto begin = std::chrono::high_resolution_clock::now();
+		#endif 
+		anotherPoint = getNextValidPoint(node, point, angle);
+		#ifdef _BENCHMARK
+			auto end = std::chrono::high_resolution_clock::now();
+			gTimeDebug += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+		#endif
+		if (anotherPoint != std::numeric_limits<size_t>::max())
 		{
-			size_t diff = i > firstAngle ? i - firstAngle : firstAngle - i;
-			diff = std::min(diff, numAngles() - diff);
-			for (size_t j = 0; j < diff; j++)
-			{
-				angles.push_back(i);
-			}
+			return anotherPoint;
 		}
-		secondAngle = resolveAngle(node, firstPoint, angles[rand() % angles.size()]);
-		if (secondAngle > numAngles())
-		{
-			node = node->parent();
-		}
-		else
-		{
-			break;
-		}
-	}
-	return getPoint(node->points(secondAngle)[rand() % node->points(secondAngle).size()]);
+		node = node->parent();
+	} while (!node->isRoot());
+	return getPoint(getRandomPoint());
 }
-

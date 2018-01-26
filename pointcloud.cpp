@@ -2,61 +2,54 @@
 
 #include <iostream>
 
-PointCloud::PointCloud(const cv::Mat &gray, const cv::Mat &edges, size_t numAngles)
+PointCloud::PointCloud(const cv::Mat &img, int cannyLowThreshold, size_t numAngles)
 	: mNumAngles(numAngles)
 {
-	const uchar *edgePtr = (uchar*)edges.data;
-	std::vector<Point*> points(edges.rows * edges.cols, NULL);
-	ImageUtils imgUtils(gray);
-	for (int y = 0, index = 0; y < gray.rows; y++)
+	#ifdef _BENCHMARK
+		auto begin = std::chrono::high_resolution_clock::now();
+	#endif 
+	ImageUtils imgUtils(img, cannyLowThreshold);
+	#ifdef _BENCHMARK
+		auto end = std::chrono::high_resolution_clock::now();
+		gTimeProcessImage += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+		begin = std::chrono::high_resolution_clock::now();
+	#endif 
+	mPoints.reserve(img.total());
+	int index = 0;
+	for (int y = 0; y < img.rows; y++)
 	{
-		for (int x = 0; x < gray.cols; x++, index++)
+		for (int x = 0; x < img.cols; x++)
 		{
-			if (edgePtr[index] && x > 0 && y > 0 && x < gray.cols - 1 && y < gray.rows - 1)
+			if (imgUtils.edge(index))
 			{
-				int gradX = imgUtils.sobelX(x, y);
-				int gradY = imgUtils.sobelY(x, y);
-				float norm = std::sqrt(gradX * gradX + gradY * gradY);
-				if (norm > std::numeric_limits<float>::epsilon())
-				{
-					Point *point = new Point;
-					point->position = cv::Point2f(x + 0.5f, y + 0.5f);
-					point->normal = cv::Point2f(gradX / norm, gradY / norm);
-					point->inverseNormal = cv::Point2f(norm / gradX, norm / gradY);
-					point->normalAngle = getNormalAngle(point->normal);
-					point->normalAngleIndex = getNormalAngleIndex(point->normalAngle);
-					points[index] = point;
+				Point point;
+				point.position = cv::Point2f(x, y);
+				point.normal = imgUtils.sobel(index);
+				point.inverseNormal = imgUtils.inverseSobel(index);
+				point.normalAngle = normalizeAngle(imgUtils.sobelAngle(index));
+				point.normalAngleIndex = getNormalAngleIndex(point.normalAngle);
+				point.curvature = imgUtils.curvature(index);
+				if (!std::isnan(point.curvature) && !std::isinf(point.curvature))
 					mPoints.push_back(point);
-				}
 			}
+			++index;
 		}
 	}
-	for (int y = 0, index = 0; y < gray.rows; y++)
-	{
-		for (int x = 0; x < gray.cols; x++, index++)
-		{
-			if (points[index] != NULL)
-			{
-				points[index]->curvature = calculateCurvature(points, x, y, gray.cols);
-			}
-		}
-	}
-	sortPointsByCurvature();
+	#ifdef _BENCHMARK
+		end = std::chrono::high_resolution_clock::now();
+		gTimeCreatePointCloud += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+		begin = std::chrono::high_resolution_clock::now();
+	#endif
+	std::sort(mPoints.begin(), mPoints.end());
 	setExtension();
+	#ifdef _BENCHMARK
+		end = std::chrono::high_resolution_clock::now();
+		gTimeSortPoints += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+	#endif
 }
 
-PointCloud::~PointCloud()
+double PointCloud::normalizeAngle(double angleDegrees)
 {
-	for (auto it = mPoints.begin(); it != mPoints.end(); ++it)
-	{
-		delete *it;
-	}
-}
-
-double PointCloud::getNormalAngle(const cv::Point2f &normal)
-{
-	double angleRadians = std::atan2(normal.y, normal.x) + M_PI;
-	double angleDegrees = std::max(0.0, angleRadians * 180 / M_PI);
 	if (angleDegrees > 180) 
 		angleDegrees -= 180;
 	return angleDegrees;
@@ -67,10 +60,10 @@ void PointCloud::setExtension()
 	float minX, minY, maxX, maxY;
 	minX = minY = std::numeric_limits<float>::max();
 	maxX = maxY = -std::numeric_limits<float>::max();
-	for (Point *point : mPoints)
+	for (const Point &point : mPoints)
 	{
-		float x = point->position.x;
-		float y = point->position.y;
+		float x = point.position.x;
+		float y = point.position.y;
 		if (x < minX) minX = x;
 		if (x > maxX) maxX = x;
 		if (y < minY) minY = y;
@@ -82,33 +75,5 @@ void PointCloud::setExtension()
 	minX = centerX - size;
 	minY = centerY - size;
 	mRect = cv::Rect2f(minX, minY, 2*size, 2*size); 
-}
-
-void PointCloud::sortPointsByCurvature()
-{
-	std::sort(mPoints.begin(), mPoints.end(), [](const Point* p1, const Point *p2)
-	{
-		return p1->curvature > p2->curvature;
-	});
-}
-
-double PointCloud::calculateCurvature(const std::vector<Point*> &points, int x, int y, int cols)
-{
-	int centerIndex = y * cols + x;
-	double sum = 0;
-	int count = 0;
-	for (int x_ = -2; x_ <= 2; x_++)
-	{
-		for (int y_ = -2; y_ <= 2; y_++)
-		{
-			int index = (y + y_) * cols + x + x_; 
-			if (points[index] != NULL)
-			{ 
-				sum += std::acos(points[centerIndex]->normal.dot(points[index]->normal));
-				++count;
-			}
-		}
-	}
-	return sum / count;
 }
 

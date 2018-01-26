@@ -1,5 +1,4 @@
-//#define _BENCHMARK_
-//#define _DEBUG_INTERACTIVE
+#define _DEBUG_INTERACTIVE
 
 #include <iostream>
 #include <map>
@@ -11,27 +10,20 @@
 #include <memory>
 #include <time.h>
 
-#include <opencv2/core/core.hpp>
-#include <opencv2/highgui/highgui.hpp>
-#include <opencv2/imgproc/imgproc.hpp>
-
 #include <Eigen/Dense>
 #include <eigen3/unsupported/Eigen/NonLinearOptimization>
 
-#include "houghcell.h"
-
-// pre-processing parameters
-#define CANNY_MAX_THRESHOLD 100
-#define CANNY_RATIO 3
-#define CANNY_KERNEL_SIZE 3
+#include "houghcell.h" 
 
 // algorithm parameters 
 #define HOUGH_NUM_ANGLES 18
 #define HOUGH_MIN_ARC_LENGTH 9 
 #define HOUGH_BRANCHING_FACTOR 2 
 #define HOUGH_MAX_INTERSECTION_RATIO 1.5f
-#define QUADTREE_MIN_NUM_POINTS 25 
-#define SAMPLER_CLIMB_CHANCE 0.5f 
+#define QUADTREE_MIN_NUM_POINTS 10
+#define QUADTREE_MIN_NUM_ANGLES 3
+#define QUADTREE_MIN_SIZE 20.0f
+#define SAMPLER_CLIMB_CHANCE 0.25f 
 
 std::string gEdgeWindowName = "Edge image";
 int gCannyLowThreshold;
@@ -39,6 +31,20 @@ int gCirclePrecision;
 cv::Mat gImg;
 cv::Mat gImgGray;
 cv::Mat gFrame;
+
+#ifdef _BENCHMARK
+double gTimeProcessImage;
+double gTimeCreatePointCloud;
+double gTimeSortPoints;
+double gTimeCreateQuadtree;
+double gTimeSample1;
+double gTimeSample2;
+double gTimeIntersection;
+double gTimeAddIntersection;
+double gTimeVisit;
+double gTimeAddCircle;
+double gTimeDebug;
+#endif 
 
 #ifdef _DEBUG_INTERACTIVE
 struct Intersection;
@@ -82,7 +88,7 @@ void drawPoints(const PointCloud *pointCloud)
 {
 	for (size_t i = 0; i < pointCloud->numPoints(); i++)
 	{
-		drawPoint(pointCloud->point(i)->position);
+		drawPoint(pointCloud->point(i).position);
 	}
 }
   
@@ -115,7 +121,7 @@ void displayInteractiveFrame()
 		{
 			if (gActiveCell->sampler()->isRemoved(i))
 			{
-				drawPoint(pointCloud->point(i)->position, cv::Scalar(0, 0, 255));
+				drawPoint(pointCloud->point(i).position, cv::Scalar(0, 0, 255));
 			}
 		}
 	}
@@ -126,10 +132,10 @@ void displayInteractiveFrame()
 			color = cv::Scalar(0, 255, 0);
 		else 
 			color = cv::Scalar(0, 0, 255);
-		const Point *p1 = pointCloud->point(intersection.p1);
-		const Point *p2 = pointCloud->point(intersection.p2);
-		drawLine(p1->position, p1->position + p1->normal * 10, color);
-		drawLine(p2->position, p2->position + p2->normal * 10, color);
+		const Point &p1 = pointCloud->point(intersection.p1);
+		const Point &p2 = pointCloud->point(intersection.p2);
+		drawLine(p1.position, p1.position + p1.normal * 10, color);
+		drawLine(p2.position, p2.position + p2.normal * 10, color);
 		drawPoint(intersection.position, color);
 	}
 	for (const Circle *circle : gCircles)
@@ -145,7 +151,7 @@ void displayInteractiveFrame()
 
 bool isPointOnCircle(HoughCell *cell, Circle *circle, size_t point)
 {
-	cv::Point2f pointPosition = cell->pointCloud()->point(point)->position;
+	const cv::Point2f &pointPosition = cell->pointCloud()->point(point).position;
 	float dist = norm(pointPosition - circle->center);
 	return std::abs(dist - circle->radius) < cell->minCellSize();
 }
@@ -171,6 +177,9 @@ void subdivide(HoughAccumulator *accumulator, std::vector<Circle*> &circles)
 	}        
 	else
 	{
+		#ifdef _BENCHMARK
+			auto begin = std::chrono::high_resolution_clock::now();
+		#endif
 		Circle *circle = accumulator->getCircleCandidate();
 		for (size_t i = 0; i < cell->pointCloud()->numPoints(); i++)
 		{
@@ -186,6 +195,10 @@ void subdivide(HoughAccumulator *accumulator, std::vector<Circle*> &circles)
 		#endif
 		circles.push_back(circle);
 		cell->setVisited();
+		#ifdef _BENCHMARK
+			auto end = std::chrono::high_resolution_clock::now();
+			gTimeAddCircle += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+		#endif 
 	}
 }
  
@@ -213,6 +226,19 @@ void houghTransform(HoughCell *cell, std::vector<Circle*> &circles)
  
 void cannyCallback(int slider, void *userData)
 {
+	#ifdef _BENCHMARK
+		gTimeProcessImage = 0;
+		gTimeCreatePointCloud = 0;
+		gTimeSortPoints = 0;
+		gTimeCreateQuadtree = 0;
+		gTimeSample1 = 0;
+		gTimeSample2 = 0;
+		gTimeIntersection = 0;
+		gTimeAddIntersection = 0;
+		gTimeVisit = 0;
+		gTimeAddCircle = 0;
+		gTimeDebug = 0;
+	#endif 
 	#ifdef _DEBUG_INTERACTIVE	
 		gRects.clear();
 		gIntersections.clear();
@@ -221,31 +247,28 @@ void cannyCallback(int slider, void *userData)
 	std::cout << "Preprocessing..." << std::endl;
 	auto begin = std::chrono::high_resolution_clock::now();
 	cv::Mat gray = gImgGray.clone();
-	// Canny detector 
-	cv::Mat edges;
-	cv::Canny(gray, edges, gCannyLowThreshold, gCannyLowThreshold * CANNY_RATIO, CANNY_KERNEL_SIZE);
 	// Calculate normals and curvatures  
-	cv::GaussianBlur(gray, gray, cv::Size(3, 3), 0, 0);
-	std::cout << "a" << std::endl;
-	PointCloud *pointCloud = new PointCloud(gray, edges, HOUGH_NUM_ANGLES);
-	std::cout << "b" << std::endl;
-	Quadtree *quadtree = new Quadtree(pointCloud, QUADTREE_MIN_NUM_POINTS);
-	std::cout << "c" << std::endl;
+	PointCloud *pointCloud = new PointCloud(gray, gCannyLowThreshold, HOUGH_NUM_ANGLES);
+	Quadtree *quadtree = new Quadtree(pointCloud, QUADTREE_MIN_NUM_POINTS, QUADTREE_MIN_NUM_ANGLES, QUADTREE_MIN_SIZE);
+	Sampler *sampler = new Sampler(quadtree, SAMPLER_CLIMB_CHANCE, HOUGH_MIN_ARC_LENGTH);
+	HoughCell *cell = new HoughCell(sampler, HOUGH_BRANCHING_FACTOR, gCirclePrecision, HOUGH_MAX_INTERSECTION_RATIO);
 	auto end = std::chrono::high_resolution_clock::now();
-	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
-	std::cout << "Time elapsed: " << duration << "ms..." << std::endl;
+	auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+	std::cout << "Time elapsed: " << duration / 1e6 << "ms" << std::endl;
+	#ifdef _BENCHMARK
+		std::cout << "\tTime to process image: " << gTimeProcessImage / 1e6 << "ms (" << gTimeProcessImage / duration * 100 << "%)" << std::endl
+					<< "\tTime to create point cloud: " << gTimeCreatePointCloud / 1e6 << "ms (" << gTimeCreatePointCloud / duration * 100 << "%)" << std::endl
+					<< "\tTime to sort points: " << gTimeSortPoints / 1e6 << "ms (" << gTimeSortPoints / duration * 100 << "%)" << std::endl
+					<< "\tTime to create quadtree: " << gTimeCreateQuadtree / 1e6 << "ms (" << gTimeCreateQuadtree / duration * 100 << "%)" << std::endl
+					<< "\tExplained: " << (gTimeProcessImage + gTimeCreatePointCloud + gTimeSortPoints + gTimeCreateQuadtree) / duration * 100 << "%" << std::endl;
+	#endif 
 	// Draw points 
-	gFrame = cv::Mat::zeros(edges.size(), CV_8UC3);
+	gFrame = cv::Mat::zeros(gray.size(), CV_8UC3);
 	drawPoints(pointCloud);
 	//drawQuadtree(quadtree);
 	// Find circles 
 	std::cout << "Detecting circles..." << std::endl;
-	#ifdef _BENCHMARK_
- 
-	#endif 
 	begin = std::chrono::high_resolution_clock::now();
-	Sampler *sampler = new Sampler(quadtree, SAMPLER_CLIMB_CHANCE, HOUGH_MIN_ARC_LENGTH);
-	HoughCell *cell = new HoughCell(sampler, HOUGH_BRANCHING_FACTOR, gCirclePrecision, HOUGH_MAX_INTERSECTION_RATIO);
 	std::vector<Circle*> circles;
 	#ifdef _DEBUG_INTERACTIVE
 		gActiveCell = cell;
@@ -253,16 +276,18 @@ void cannyCallback(int slider, void *userData)
 	#endif
 	houghTransform(cell, circles);
 	end = std::chrono::high_resolution_clock::now();
-	duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count();
-	#ifdef _BENCHMARK_
-		/*std::cout << "Initialization time elapsed: " << benchmarkInitialization / 1e6 << "ms..." << std::endl;
-		std::cout << "Sample time elapsed: " << benchmarkSample / 1e6 << "ms..." << std::endl;
-		std::cout << "Intersection time elapsed: " << benchmarkIntersection / 1e6 << "ms..." << std::endl;
-		std::cout << "Create new bin: " << benchmarkCreateBin / 1e6 << "ms..." << std::endl;
-		std::cout << "Add intersection time elapsed: " << benchmarkAddIntersection / 1e6 << "ms..." << std::endl;
-		std::cout << "Call recursively: " << benchmarkRecursiveCall / 1e6 << "ms..." << std::endl;*/
+	duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+	std::cout << "Time elapsed: " << duration / 1e6 << "ms" << std::endl;
+	#ifdef _BENCHMARK
+		std::cout << "\tTime to sample: " << (gTimeSample1 + gTimeSample2) / 1e6 << "ms (" << (gTimeSample1 + gTimeSample2) / duration * 100 << "%)" << std::endl
+						<< "\t\tFirst point: " << gTimeSample1 / 1e6 << "ms (" << gTimeSample1 / duration * 100 << "%); Second point: " << gTimeSample2 / 1e6 << "ms (" << gTimeSample2 / duration * 100 << "%)" << std::endl
+					<< "\tTime to calculate intersection: " << gTimeIntersection / 1e6 << "ms (" << gTimeIntersection / duration * 100 << "%)" << std::endl
+					<< "\tTime to add intersection: " << gTimeAddIntersection / 1e6 << "ms (" << gTimeAddIntersection / duration * 100 << "%)" << std::endl
+					<< "\tTime to visit cell: " << gTimeVisit / 1e6 << "ms (" << gTimeVisit / duration * 100 << "%)" << std::endl
+					<< "\tTime to add circle: " << gTimeAddCircle / 1e6 << "ms (" << gTimeAddCircle / duration * 100 << "%)" << std::endl
+					<< "\tTime debug: " << gTimeDebug / 1e6 << "ms (" << gTimeDebug / duration * 100 << "%)" << std::endl
+					<< "\tExplained: " << (gTimeSample1 + gTimeSample2 + gTimeIntersection + gTimeAddIntersection + gTimeVisit + gTimeAddCircle) / duration * 100 << "%" << std::endl;
 	#endif 
-	std::cout << "Total time elapsed: " << duration << "ms..." << std::endl;
 	// Draw circles 
 	for (const Circle *circle : circles)
 	{
@@ -270,7 +295,7 @@ void cannyCallback(int slider, void *userData)
 		drawCircle(circle, color);
 	}
 	// Delete data
-	//delete cell;
+	delete cell;
 	delete quadtree;
 	delete pointCloud;
 	for (Circle *circle : circles)
@@ -301,7 +326,7 @@ int main(int argc, char **argv)
 		return -1;
 	}
 	cv::namedWindow(gEdgeWindowName, CV_WINDOW_AUTOSIZE);
-	cv::createTrackbar("Min threshold:", gEdgeWindowName, &gCannyLowThreshold, CANNY_MAX_THRESHOLD, cannyCallback);
+	cv::createTrackbar("Min threshold:", gEdgeWindowName, &gCannyLowThreshold, 100, cannyCallback);
 	cannyCallback(gCannyLowThreshold, NULL);
 	cv::imshow("Original image", gImg);
 	cv::waitKey(0);

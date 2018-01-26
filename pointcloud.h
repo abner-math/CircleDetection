@@ -1,50 +1,22 @@
 #ifndef _POINTCLOUD_H_
 #define _POINTCLOUD_H_
 
-#include <opencv2/core/core.hpp>
-
+#include "imageutils.h"
+#include "benchmark.hpp"
+ 
 struct Point
 {
-	cv::Point2f position;
+	cv::Point2f position; 
 	cv::Point2f normal;
 	cv::Point2f inverseNormal;
-	double curvature;
 	double normalAngle;
 	size_t normalAngleIndex;
-};
-
-class ImageUtils
-{
-public:
-	ImageUtils(const cv::Mat &img)
-		: mImg(img)
-	{
-		
-	}
+	float curvature;
 	
-	int valueAt(int x, int y) const   
+	bool operator<(const Point &otherPoint) const 
 	{
-		const uchar *ptr = (uchar*)mImg.data;
-		return static_cast<int>(ptr[y * mImg.cols + x]);
+		return curvature > otherPoint.curvature;
 	}
-
-	int sobelX(int x, int y) const 
-	{
-		return valueAt(x - 1, y - 1) - valueAt(x + 1, y - 1) +
-				2 * valueAt(x - 1, y) - 2 * valueAt(x + 1, y) +
-				valueAt(x - 1, y + 1) - valueAt(x + 1, y + 1);
-	}
-
-	int sobelY(int x, int y) const 
-	{
-		return valueAt(x - 1, y - 1) - valueAt(x - 1, y + 1) +
-				2 * valueAt(x, y - 1) - 2 * valueAt(x, y + 1) +
-				valueAt(x + 1, y - 1) - valueAt(x + 1, y + 1);
-	}
-
-private:
-	const cv::Mat &mImg;
-	
 };
 
 inline float norm(const cv::Point2f &p)
@@ -55,10 +27,8 @@ inline float norm(const cv::Point2f &p)
 class PointCloud
 {
 public:
-	PointCloud(const cv::Mat &gray, const cv::Mat &edges, size_t numAngles);
+	PointCloud(const cv::Mat &img, int cannyLowThreshold, size_t numAngles);
 
-	~PointCloud();
-	
 	size_t numAngles() const 
 	{
 		return mNumAngles;
@@ -69,7 +39,7 @@ public:
 		return mPoints.size();
 	}
 	
-	const Point* point(size_t index) const 
+	const Point& point(size_t index) const 
 	{
 		return mPoints[index];
 	}
@@ -80,7 +50,7 @@ public:
 	}
 	
 private:
-	std::vector<Point*> mPoints;
+	std::vector<Point> mPoints;
 	cv::Rect2f mRect;
 	size_t mNumAngles;
 				
@@ -89,14 +59,10 @@ private:
 		return static_cast<size_t>(std::round(normalAngle / (180.0 / mNumAngles))) % mNumAngles;
 	}
 	
-	double getNormalAngle(const cv::Point2f &normal);
+	double normalizeAngle(double angleDegrees);
 
 	void setExtension();
 	
-	void sortPointsByCurvature();
-	
-	static double calculateCurvature(const std::vector<Point*> &points, int x, int y, int cols);
-
 };
 
 #endif // _POINTCLOUD_H_

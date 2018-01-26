@@ -6,7 +6,7 @@
 class Quadtree
 {
 public:
-	Quadtree(const PointCloud *pointCloud, size_t minNumPoints);
+	Quadtree(const PointCloud *pointCloud, size_t minNumPoints, size_t minNumAngles, float minSize);
 	
 	~Quadtree();
 	
@@ -68,14 +68,17 @@ public:
 private:
 	const PointCloud *mPointCloud;
 	const size_t mMinNumPoints;
+	const size_t mMinNumAngles;
+	const float mMinSize;
 	Quadtree *mRoot;
 	Quadtree *mParent;
-	Quadtree *mChildren[4];
+	std::vector<Quadtree*> mChildren;
 	cv::Point2f mCenter;
 	float mSize;
 	bool mIsLeaf;
 	std::vector<std::vector<size_t> > mPoints;
 	size_t mNumPoints;
+	size_t mNumAngles;
 	std::vector<Quadtree*> *mLeaves;
 	
 	Quadtree(Quadtree *parent);

@@ -54,6 +54,9 @@ HoughCell::~HoughCell()
 
 std::set<HoughAccumulator*> HoughCell::visit()
 {
+	#ifdef _BENCHMARK
+		auto begin = std::chrono::high_resolution_clock::now();
+	#endif
 	mVisited = true;
 	mSampler = new Sampler(*mParent->mSampler);
 	for (size_t i = 0; i < mPointCloud->numPoints(); i++)
@@ -71,6 +74,10 @@ std::set<HoughAccumulator*> HoughCell::visit()
 				accumulators.insert(childAccumulator);
 		}
 	}
+	#ifdef _BENCHMARK
+		auto end = std::chrono::high_resolution_clock::now();
+		gTimeVisit += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+	#endif 
 	return accumulators;
 }
 
@@ -85,22 +92,30 @@ HoughAccumulator* HoughCell::addIntersection()
 	Intersection intersection;
 	if (intersectionBetweenPoints(sample, intersection))
 	{
-		return addIntersection(intersection);
+		#ifdef _BENCHMARK
+			auto begin = std::chrono::high_resolution_clock::now();
+		#endif
+		HoughAccumulator *accumulator = addIntersection(intersection);
+		#ifdef _BENCHMARK
+			auto end = std::chrono::high_resolution_clock::now();
+			gTimeAddIntersection += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+		#endif 
+		return accumulator;
 	}
 	return NULL;
 }
 
 
-bool HoughCell::pointIntersectsRect(const Point *p)
+bool HoughCell::pointIntersectsRect(const Point &p)
 {
-	float tx1 = (mRect.tl().x - p->position.x) * p->inverseNormal.x;
-	float tx2 = (mRect.br().x - p->position.x) * p->inverseNormal.x;
+	float tx1 = (mRect.tl().x - p.position.x) * p.inverseNormal.x;
+	float tx2 = (mRect.br().x - p.position.x) * p.inverseNormal.x;
  
 	float tmin = std::min(tx1, tx2);
 	float tmax = std::max(tx1, tx2);
  
-	float ty1 = (mRect.tl().y - p->position.y) * p->inverseNormal.y;
-	float ty2 = (mRect.br().y - p->position.y) * p->inverseNormal.y;
+	float ty1 = (mRect.tl().y - p.position.y) * p.inverseNormal.y;
+	float ty2 = (mRect.br().y - p.position.y) * p.inverseNormal.y;
  
 	tmin = std::max(tmin, std::min(ty1, ty2));
 	tmax = std::min(tmax, std::max(ty1, ty2));
@@ -110,13 +125,16 @@ bool HoughCell::pointIntersectsRect(const Point *p)
 
 bool HoughCell::intersectionBetweenPoints(const std::pair<size_t, size_t> &sample, Intersection &intersection)
 {
-	const Point *p1 = mPointCloud->point(sample.first);
-	const Point *p2 = mPointCloud->point(sample.second);
+	#ifdef _BENCHMARK
+		auto begin = std::chrono::high_resolution_clock::now();
+	#endif
+	const Point &p1 = mPointCloud->point(sample.first);
+	const Point &p2 = mPointCloud->point(sample.second);
 	
-	cv::Point2f a = p1->position;
-	cv::Point2f b = p1->position + p1->normal;
-	cv::Point2f c = p2->position;
-	cv::Point2f d = p2->position + p2->normal;
+	cv::Point2f a = p1.position;
+	cv::Point2f b = p1.position + p1.normal;
+	cv::Point2f c = p2.position;
+	cv::Point2f d = p2.position + p2.normal;
 
 	// Get (a, b, c) of the first line 
 	float a1 = b.y - a.y;
@@ -131,7 +149,13 @@ bool HoughCell::intersectionBetweenPoints(const std::pair<size_t, size_t> &sampl
 	// Get delta and check if the lines are parallel
 	float delta = a1 * b2 - a2 * b1;
 	if (std::abs(delta) < std::numeric_limits<float>::epsilon())
+	{
+		#ifdef _BENCHMARK
+			auto end = std::chrono::high_resolution_clock::now();
+			gTimeIntersection += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+		#endif 
 		return false;
+	}
 
 	float x = (b2 * c1 - b1 * c2) / delta;
 	float y = (a1 * c2 - a2 * c1) / delta;
@@ -142,12 +166,22 @@ bool HoughCell::intersectionBetweenPoints(const std::pair<size_t, size_t> &sampl
 	float dist2 = norm(c - position);
 	if (dist1 < std::numeric_limits<float>::epsilon() || dist2 < std::numeric_limits<float>::epsilon() || 
 		std::max(dist1, dist2) / std::min(dist1, dist2) > mMaxIntersectionRatio)
+	{
+		#ifdef _BENCHMARK
+			auto end = std::chrono::high_resolution_clock::now();
+			gTimeIntersection += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+		#endif 
 		return false; 
+	}
 	
 	intersection.p1 = sample.first;
 	intersection.p2 = sample.second;
 	intersection.position = position; 
 	intersection.dist = (dist1 + dist2) / 2;
+	#ifdef _BENCHMARK
+		auto end = std::chrono::high_resolution_clock::now();
+		gTimeIntersection += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+	#endif 
 	return true;
 }
 
@@ -183,13 +217,15 @@ HoughAccumulator* HoughCell::addIntersection(const Intersection &intersection)
 		{
 			mSampler->removePointFromAll(intersection.p1);
 			mSampler->removePointFromAll(intersection.p2);
-			mPoints.insert(intersection.p1);
-			mPoints.insert(intersection.p2);
+			mPoints.push_back(intersection.p1);
+			mPoints.push_back(intersection.p2);
 			return mChildren[childIndex]->accumulate(intersection);
 		}
 	}
 	else if (mParent != this)
 	{
+		mSampler->removePoint(intersection.p1);
+		mSampler->removePoint(intersection.p2);
 		return mParent->addIntersection(intersection);
 	}
 	return NULL;
