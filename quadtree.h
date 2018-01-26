@@ -50,6 +50,11 @@ public:
 		return mPoints[angle];
 	}
 	
+	size_t randomPoint(size_t angle) const 
+	{
+		return mPoints[angle][rand() % mPoints[angle].size()];
+	}
+	
 	cv::Rect2f rect() const 
 	{
 		return cv::Rect2f(mCenter.x - mSize / 2, mCenter.y - mSize / 2, mSize, mSize);

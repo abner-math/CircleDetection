@@ -4,12 +4,9 @@
 #include <random>
 #include <set>
 
-#include <boost/random.hpp>
-#include <boost/generator_iterator.hpp>
-
 #include "quadtree.h"
 
-typedef boost::variate_generator< boost::mt19937, boost::binomial_distribution<> > GENERATOR_TYPE;
+#define HISTORY_SIZE 10
 
 class Sampler
 {
@@ -17,8 +14,6 @@ public:
 	Sampler(const Quadtree *quadtree, float climbChance, size_t minArcLength);
 	
 	Sampler(Sampler &sampler);
-	
-	~Sampler();
 	
 	size_t numAvailablePoints() const 
 	{
@@ -47,7 +42,7 @@ public:
 	
 	bool canSample() const;
 	
-	std::pair<size_t, size_t> sample(const std::vector<size_t> &points);
+	std::pair<size_t, size_t> sample();
 	
 	bool isRemoved(size_t point) const
 	{
@@ -68,8 +63,8 @@ private:
 	std::vector<size_t> mNumPointsPerAngle;
 	size_t mNumEmptyAngles;
 	size_t mNumAvailablePoints;
-	GENERATOR_TYPE *mRandomPointGenerator;
-	GENERATOR_TYPE *mRandomAngleGenerator;
+	size_t mLastPoints[HISTORY_SIZE];
+	size_t mLastPointIndex;
 	
 	inline size_t numAngles() const 
 	{
@@ -81,26 +76,10 @@ private:
 		return mQuadtree->pointCloud()->point(point).normalAngleIndex;
 	}
 	
-	size_t getPoint(size_t index);
-	
-	size_t selectRandomPoint(const std::vector<size_t> &points);
-	
 	inline float getRandomNumber() const
 	{
 		return rand() / static_cast<float>(RAND_MAX);
 	}
-	
-	inline size_t getRandomPoint() const 
-	{
-		return (*mRandomPointGenerator)();
-	}
-	
-	inline size_t getRandomAngle() const 
-	{
-		return (*mRandomAngleGenerator)();
-	}
-	
-	size_t getValidPoint(const Quadtree *node, size_t firstPoint, size_t angle);
 	
 	inline size_t decreaseOneAngle(size_t angle) const
 	{
@@ -114,15 +93,13 @@ private:
 		return angle + 1;
 	}
 	
-	inline size_t selectOppositeAngle(size_t angle) const
-	{
-		size_t x = (getRandomAngle() + angle + numAngles() / 2) % numAngles();
-		return x;
-	}
+	size_t getPoint(size_t index);
 	
-	size_t getNextValidPoint(const Quadtree *node, size_t firstPoint, size_t angle);
+	size_t getValidPoint(const Quadtree *node, size_t angle);
 	
-	size_t selectAnotherRandomPoint(size_t firstPoint);
+	size_t selectRandomPoint(size_t point);
+	
+	size_t selectRandomPoint();
 	
 };
 

@@ -88,7 +88,7 @@ void HoughCell::setVisited()
 
 HoughAccumulator* HoughCell::addIntersection()
 {
-	std::pair<size_t, size_t> sample = mSampler->sample(mPoints);
+	std::pair<size_t, size_t> sample = mSampler->sample();
 	Intersection intersection;
 	if (intersectionBetweenPoints(sample, intersection))
 	{
@@ -217,15 +217,13 @@ HoughAccumulator* HoughCell::addIntersection(const Intersection &intersection)
 		{
 			mSampler->removePointFromAll(intersection.p1);
 			mSampler->removePointFromAll(intersection.p2);
-			mPoints.push_back(intersection.p1);
-			mPoints.push_back(intersection.p2);
 			return mChildren[childIndex]->accumulate(intersection);
 		}
 	}
 	else if (mParent != this)
 	{
-		mSampler->removePoint(intersection.p1);
-		mSampler->removePoint(intersection.p2);
+		//mSampler->removePoint(intersection.p1);
+		//mSampler->removePoint(intersection.p2);
 		return mParent->addIntersection(intersection);
 	}
 	return NULL;

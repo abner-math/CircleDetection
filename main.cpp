@@ -35,7 +35,6 @@ cv::Mat gFrame;
 #ifdef _BENCHMARK
 double gTimeProcessImage;
 double gTimeCreatePointCloud;
-double gTimeSortPoints;
 double gTimeCreateQuadtree;
 double gTimeSample1;
 double gTimeSample2;
@@ -229,7 +228,6 @@ void cannyCallback(int slider, void *userData)
 	#ifdef _BENCHMARK
 		gTimeProcessImage = 0;
 		gTimeCreatePointCloud = 0;
-		gTimeSortPoints = 0;
 		gTimeCreateQuadtree = 0;
 		gTimeSample1 = 0;
 		gTimeSample2 = 0;
@@ -258,9 +256,8 @@ void cannyCallback(int slider, void *userData)
 	#ifdef _BENCHMARK
 		std::cout << "\tTime to process image: " << gTimeProcessImage / 1e6 << "ms (" << gTimeProcessImage / duration * 100 << "%)" << std::endl
 					<< "\tTime to create point cloud: " << gTimeCreatePointCloud / 1e6 << "ms (" << gTimeCreatePointCloud / duration * 100 << "%)" << std::endl
-					<< "\tTime to sort points: " << gTimeSortPoints / 1e6 << "ms (" << gTimeSortPoints / duration * 100 << "%)" << std::endl
 					<< "\tTime to create quadtree: " << gTimeCreateQuadtree / 1e6 << "ms (" << gTimeCreateQuadtree / duration * 100 << "%)" << std::endl
-					<< "\tExplained: " << (gTimeProcessImage + gTimeCreatePointCloud + gTimeSortPoints + gTimeCreateQuadtree) / duration * 100 << "%" << std::endl;
+					<< "\tExplained: " << (gTimeProcessImage + gTimeCreatePointCloud + gTimeCreateQuadtree) / duration * 100 << "%" << std::endl;
 	#endif 
 	// Draw points 
 	gFrame = cv::Mat::zeros(gray.size(), CV_8UC3);

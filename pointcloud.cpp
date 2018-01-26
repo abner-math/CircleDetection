@@ -2,6 +2,63 @@
 
 #include <iostream>
 
+double PointCloud::normalizeAngle(double angleDegrees)
+{
+	if (angleDegrees > 180) 
+		angleDegrees -= 180;
+	return angleDegrees;
+}
+
+std::vector<PointCloud*> PointCloud::createPointCloudsFromImage(const cv::Mat &img, int cannyLowThreshold, size_t numAngles)
+{
+	#ifdef _BENCHMARK
+		auto begin = std::chrono::high_resolution_clock::now();
+	#endif 
+	ImageUtils imgUtils(img, cannyLowThreshold);
+	#ifdef _BENCHMARK
+		auto end = std::chrono::high_resolution_clock::now();
+		gTimeProcessImage += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+		begin = std::chrono::high_resolution_clock::now();
+	#endif 
+	PointCloud *pointCloud = NULL;
+	std::vector<PointCloud*> pointClouds;
+	int index = 0;
+	std::vector<PointCloud*> indices(img.cols);
+	for (int y = 0; y < img.rows; y++)
+	{
+		for (int x = 0; x < img.cols; x++)
+		{
+			if (imgUtils.edge(index))
+			{
+				
+				if (pointCloud == NULL)
+				{
+					pointCloud = new PointCloud(numAngles);
+					pointClouds.push_back(pointCloud);
+				}
+				Point point;
+				point.position = cv::Point2f(x, y);
+				point.normal = imgUtils.sobel(index);
+				point.inverseNormal = imgUtils.inverseSobel(index);
+				point.normalAngle = normalizeAngle(imgUtils.sobelAngle(index));
+				point.normalAngleIndex = getNormalAngleIndex(point.normalAngle);
+				point.curvature = imgUtils.curvature(index);
+				pointCloud->addPoint(point);
+				indices[x] = pointCloud;
+			}
+			else
+			{
+				indices[x] = NULL;
+			}
+			++index;
+		}
+	}
+	#ifdef _BENCHMARK
+		end = std::chrono::high_resolution_clock::now();
+		gTimeCreatePointCloud += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+	#endif
+}
+
 PointCloud::PointCloud(const cv::Mat &img, int cannyLowThreshold, size_t numAngles)
 	: mNumAngles(numAngles)
 {
@@ -28,31 +85,17 @@ PointCloud::PointCloud(const cv::Mat &img, int cannyLowThreshold, size_t numAngl
 				point.inverseNormal = imgUtils.inverseSobel(index);
 				point.normalAngle = normalizeAngle(imgUtils.sobelAngle(index));
 				point.normalAngleIndex = getNormalAngleIndex(point.normalAngle);
-				point.curvature = imgUtils.curvature(index);
 				if (!std::isnan(point.curvature) && !std::isinf(point.curvature))
 					mPoints.push_back(point);
 			}
 			++index;
 		}
 	}
-	#ifdef _BENCHMARK
-		end = std::chrono::high_resolution_clock::now();
-		gTimeCreatePointCloud += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
-		begin = std::chrono::high_resolution_clock::now();
-	#endif
-	std::sort(mPoints.begin(), mPoints.end());
 	setExtension();
 	#ifdef _BENCHMARK
 		end = std::chrono::high_resolution_clock::now();
-		gTimeSortPoints += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+		gTimeCreatePointCloud += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
 	#endif
-}
-
-double PointCloud::normalizeAngle(double angleDegrees)
-{
-	if (angleDegrees > 180) 
-		angleDegrees -= 180;
-	return angleDegrees;
 }
 
 void PointCloud::setExtension()

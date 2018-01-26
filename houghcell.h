@@ -86,7 +86,6 @@ private:
 	size_t mIndX, mIndY;
 	bool mVisited;
 	std::vector<HoughAccumulator*> mAccumulators;
-	std::vector<size_t> mPoints;
 		
 	// reference: https://tavianator.com/fast-branchless-raybounding-box-intersections/
 	bool pointIntersectsRect(const Point &p);

@@ -7,7 +7,6 @@
 
 extern double gTimeProcessImage;
 extern double gTimeCreatePointCloud;
-extern double gTimeSortPoints;
 extern double gTimeCreateQuadtree;
 extern double gTimeSample1;
 extern double gTimeSample2;
