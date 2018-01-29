@@ -22,7 +22,7 @@ inline float norm(const cv::Point2f &p)
 class PointCloud
 {
 public:
-	static std::vector<PointCloud*> createPointCloudsFromImage(const cv::Mat &img, int cannyLowThreshold, short numAngles);
+	static void createPointCloudsFromImage(const cv::Mat &img, int cannyLowThreshold, short numAngles, std::vector<PointCloud> &pointClouds);
 
 	short numAngles() const 
 	{

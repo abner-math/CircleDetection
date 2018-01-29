@@ -2,7 +2,7 @@
 
 #include <iostream>
 
-std::vector<PointCloud*> PointCloud::createPointCloudsFromImage(const cv::Mat &img, int cannyLowThreshold, short numAngles)
+void PointCloud::createPointCloudsFromImage(const cv::Mat &img, int cannyLowThreshold, short numAngles, std::vector<PointCloud> &pointClouds)
 {
 	#ifdef _BENCHMARK
 		auto begin = std::chrono::high_resolution_clock::now();
@@ -26,11 +26,7 @@ std::vector<PointCloud*> PointCloud::createPointCloudsFromImage(const cv::Mat &i
 		gTimeGroupPoints += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
 		begin = std::chrono::high_resolution_clock::now();
 	#endif
-	std::vector<PointCloud*> pointClouds(numConnectedComponents);
-	for (int i = 0; i < numConnectedComponents; i++)
-	{
-		pointClouds[i] = new PointCloud(numAngles);
-	}
+	pointClouds = std::vector<PointCloud>(numConnectedComponents, PointCloud(numAngles));
 	for (int edgeIndex = 0; edgeIndex < imgUtils.numEdges(); edgeIndex++)
 	{
 		Point point;
@@ -40,18 +36,17 @@ std::vector<PointCloud*> PointCloud::createPointCloudsFromImage(const cv::Mat &i
 		point.angleIndex = imgUtils.angleIndexOf(edgeIndex);
 		point.curvature = imgUtils.curvature(edgeIndex);
 		point.isCentroid = imgUtils.isCentroid(edgeIndex);
-		pointClouds[imgUtils.labelOf(edgeIndex)]->addPoint(point);
+		pointClouds[imgUtils.labelOf(edgeIndex)].addPoint(point);
 	}
 	for (int i = 0; i < numConnectedComponents; i++)
 	{
-		pointClouds[i]->setExtension();
-		pointClouds[i]->sortPointsByCurvature();
+		pointClouds[i].setExtension();
+		pointClouds[i].sortPointsByCurvature();
 	}
 	#ifdef _BENCHMARK
 		end = std::chrono::high_resolution_clock::now();
 		gTimeCreatePointCloud += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
 	#endif
-	return pointClouds;
 }
 
 PointCloud::PointCloud(int numAngles)

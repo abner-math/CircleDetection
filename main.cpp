@@ -16,8 +16,6 @@
 #include "houghcell.h" 
 
 // algorithm parameters 
-#define HOUGH_NUM_ANGLES 18
-#define HOUGH_MIN_ARC_LENGTH 9 
 #define HOUGH_BRANCHING_FACTOR 2 
 #define HOUGH_MAX_INTERSECTION_RATIO 1.5f
 #define QUADTREE_MIN_NUM_POINTS 10
@@ -28,6 +26,8 @@
 std::string gEdgeWindowName = "Edge image";
 int gCannyLowThreshold;
 int gCirclePrecision;
+int gNumAngles;
+int gMinArcLength;
 cv::Mat gImg;
 cv::Mat gImgGray;
 cv::Mat gFrame;
@@ -85,19 +85,19 @@ void drawCircle(const Circle *circle, cv::Scalar color = cv::Scalar(255, 255, 25
 	cv::circle(gFrame, cv::Point((int)circle->center.x, (int)circle->center.y), (int)circle->radius, color, 2); 
 }
 
-void drawPoints(const PointCloud *pointCloud, cv::Scalar color = cv::Scalar(255, 255, 255))
+void drawPoints(const PointCloud &pointCloud, cv::Scalar color = cv::Scalar(255, 255, 255))
 {
-	for (size_t i = 0; i < pointCloud->numPoints(); i++)
+	for (size_t i = 0; i < pointCloud.numPoints(); i++)
 	{
-		drawPoint(pointCloud->point(i).position, color);
+		drawPoint(pointCloud.point(i).position, color);
 	}
 }
 
-void drawGroups(const PointCloud *pointCloud, cv::Scalar color = cv::Scalar(255, 255, 255))
+void drawGroups(const PointCloud &pointCloud, cv::Scalar color = cv::Scalar(255, 255, 255))
 {
-	for (size_t i = 0; i < pointCloud->numGroups(); i++)
+	for (size_t i = 0; i < pointCloud.numGroups(); i++)
 	{
-		drawPoint(pointCloud->group(i).position, color);
+		drawPoint(pointCloud.group(i).position, color);
 	}
 }
   
@@ -259,10 +259,9 @@ void cannyCallback(int slider, void *userData)
 	cv::Mat gray = gImgGray.clone();
 	std::cout << "Image size: " << gray.size() << std::endl;
 	// Calculate normals and curvatures 
-	std::vector<PointCloud*> pointClouds = PointCloud::createPointCloudsFromImage(gray, gCannyLowThreshold, HOUGH_NUM_ANGLES);
-	PointCloud *pointCloud = pointClouds[0];
-	/*Quadtree *quadtree = new Quadtree(pointCloud, QUADTREE_MIN_NUM_POINTS, QUADTREE_MIN_NUM_ANGLES, QUADTREE_MIN_SIZE);
-	Sampler *sampler = new Sampler(quadtree, SAMPLER_CLIMB_CHANCE, HOUGH_MIN_ARC_LENGTH);
+	std::vector<PointCloud> pointClouds;
+	PointCloud::createPointCloudsFromImage(gray, gCannyLowThreshold, gNumAngles, pointClouds);
+	/*Sampler *sampler = new Sampler(pointCloud, SAMPLER_CLIMB_CHANCE, HOUGH_MIN_ARC_LENGTH);
 	HoughCell *cell = new HoughCell(sampler, HOUGH_BRANCHING_FACTOR, gCirclePrecision, HOUGH_MAX_INTERSECTION_RATIO);*/
 	auto end = std::chrono::high_resolution_clock::now();
 	auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
@@ -346,10 +345,6 @@ void cannyCallback(int slider, void *userData)
 	{
 		delete circle;
 	}
-	for (size_t i = 0; i < pointClouds.size(); i++)
-	{
-		delete pointClouds[i];
-	}
 	// Display image
 	cv::imshow(gEdgeWindowName, gFrame);
 }
@@ -358,9 +353,9 @@ int main(int argc, char **argv)
 {
 	std::srand(time(NULL));
 
-	if (argc < 4)
+	if (argc < 5)
 	{
-		std::cerr << "Usage: ARHT <INPUT_IMAGE> <CANNY_MIN_THRESHOLD> <CIRCLE_PRECISION>" << std::endl;
+		std::cerr << "Usage: ARHT <INPUT_IMAGE> <CANNY_MIN_THRESHOLD> <CIRCLE_PRECISION> <NUM_ANGLES> <MIN_ARC_LENGTH>" << std::endl;
 		return -1;
 	}
 	std::string inputFilename(argv[1]);
@@ -368,6 +363,8 @@ int main(int argc, char **argv)
 	cv::cvtColor(gImg, gImgGray, CV_BGR2GRAY);
 	gCannyLowThreshold = atoi(argv[2]);
 	gCirclePrecision = atoi(argv[3]);
+	gNumAngles = atoi(argv[4]);
+	gMinArcLength = atoi(argv[5]);
 	if (!gImg.data)
 	{
 		std::cerr << "ERROR: Could not read image." << std::endl;
