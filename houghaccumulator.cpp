@@ -26,8 +26,8 @@ void HoughAccumulator::accumulate(const Intersection &intersection)
 {
 	mRadius.insert(intersection.dist);
 	mIntersections.push_back(intersection);
-	mAngles.insert(mCell->pointCloud()->point(intersection.p1).normalAngleIndex);
-	mAngles.insert(mCell->pointCloud()->point(intersection.p2).normalAngleIndex);
+	mAngles.insert(mCell->pointCloud()->point(intersection.p1).angleIndex);
+	mAngles.insert(mCell->pointCloud()->point(intersection.p2).angleIndex);
 }
 
 bool HoughAccumulator::hasCircleCandidate() const 

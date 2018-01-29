@@ -9,14 +9,9 @@ struct Point
 	cv::Point2f position; 
 	cv::Point2f normal;
 	cv::Point2f inverseNormal;
-	float normalAngle;
-	size_t normalAngleIndex;
+	int angleIndex;
 	float curvature;
-	
-	bool operator<(const Point &otherPoint) const 
-	{
-		return curvature > otherPoint.curvature;
-	}
+	bool isCentroid;
 };
 
 inline float norm(const cv::Point2f &p)
@@ -27,14 +22,9 @@ inline float norm(const cv::Point2f &p)
 class PointCloud
 {
 public:
-	static std::vector<PointCloud*> createPointCloudsFromImage(const cv::Mat &img, int cannyLowThreshold, size_t numAngles);
+	static std::vector<PointCloud*> createPointCloudsFromImage(const cv::Mat &img, int cannyLowThreshold, short numAngles);
 
-	static size_t getNormalAngleIndex(float normalAngle, size_t numAngles)
-	{
-		return static_cast<size_t>(std::round(normalAngle / (180.0f / numAngles))) % numAngles;
-	}
-	
-	size_t numAngles() const 
+	short numAngles() const 
 	{
 		return mNumAngles;
 	}
@@ -44,11 +34,21 @@ public:
 		return mPoints.size();
 	}
 	
+	size_t numGroups() const 
+	{
+		return mGroups.size();
+	}
+	
 	void addPoint(const Point &point);
 	
 	const Point& point(size_t index) const 
 	{
 		return mPoints[index];
+	}
+	
+	const Point& group(size_t index) const 
+	{
+		return mGroups[index];
 	}
 	
 	const cv::Rect2f& extension() const 
@@ -58,11 +58,16 @@ public:
 	
 private:
 	std::vector<Point> mPoints;
+	std::vector<Point> mGroups;
 	cv::Rect2f mRect;
-	size_t mNumAngles;
+	short mNumAngles;
 	Point p;
 				
+	PointCloud(int numAngles);
+	
 	void setExtension();
+	
+	void sortPointsByCurvature();
 	
 };
 

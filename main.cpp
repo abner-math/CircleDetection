@@ -35,6 +35,7 @@ cv::Mat gFrame;
 #ifdef _BENCHMARK
 double gTimeProcessImage;
 double gTimeCreateConnectedComponents;
+double gTimeGroupPoints;
 double gTimeCreatePointCloud;
 double gTimeCreateQuadtree;
 double gTimeSample1;
@@ -89,6 +90,14 @@ void drawPoints(const PointCloud *pointCloud, cv::Scalar color = cv::Scalar(255,
 	for (size_t i = 0; i < pointCloud->numPoints(); i++)
 	{
 		drawPoint(pointCloud->point(i).position, color);
+	}
+}
+
+void drawGroups(const PointCloud *pointCloud, cv::Scalar color = cv::Scalar(255, 255, 255))
+{
+	for (size_t i = 0; i < pointCloud->numGroups(); i++)
+	{
+		drawPoint(pointCloud->group(i).position, color);
 	}
 }
   
@@ -229,6 +238,7 @@ void cannyCallback(int slider, void *userData)
 	#ifdef _BENCHMARK
 		gTimeProcessImage = 0;
 		gTimeCreateConnectedComponents = 0;
+		gTimeGroupPoints = 0;
 		gTimeCreatePointCloud = 0;
 		gTimeCreateQuadtree = 0;
 		gTimeSample1 = 0;
@@ -247,6 +257,7 @@ void cannyCallback(int slider, void *userData)
 	std::cout << "Preprocessing..." << std::endl;
 	auto begin = std::chrono::high_resolution_clock::now();
 	cv::Mat gray = gImgGray.clone();
+	std::cout << "Image size: " << gray.size() << std::endl;
 	// Calculate normals and curvatures 
 	std::vector<PointCloud*> pointClouds = PointCloud::createPointCloudsFromImage(gray, gCannyLowThreshold, HOUGH_NUM_ANGLES);
 	PointCloud *pointCloud = pointClouds[0];
@@ -259,17 +270,47 @@ void cannyCallback(int slider, void *userData)
 	#ifdef _BENCHMARK
 		std::cout << "\tTime to process image: " << gTimeProcessImage / 1e6 << "ms (" << gTimeProcessImage / duration * 100 << "%)" << std::endl
 					<< "\tTime to create connected components: " << gTimeCreateConnectedComponents / 1e6 << "ms (" << gTimeCreateConnectedComponents / duration * 100 << "%)" << std::endl
+					<< "\tTime to group points: " << gTimeGroupPoints / 1e6 << "ms (" << gTimeGroupPoints / duration * 100 << "%)" << std::endl
 					<< "\tTime to create point cloud: " << gTimeCreatePointCloud / 1e6 << "ms (" << gTimeCreatePointCloud / duration * 100 << "%)" << std::endl
 					<< "\tTime to create quadtree: " << gTimeCreateQuadtree / 1e6 << "ms (" << gTimeCreateQuadtree / duration * 100 << "%)" << std::endl
-					<< "\tExplained: " << (gTimeProcessImage + gTimeCreateConnectedComponents + gTimeCreatePointCloud + gTimeCreateQuadtree) / duration * 100 << "%" << std::endl;
+					<< "\tExplained: " << (gTimeProcessImage + gTimeCreateConnectedComponents + gTimeGroupPoints + gTimeCreatePointCloud + gTimeCreateQuadtree) / duration * 100 << "%" << std::endl;
 	#endif 
 	// Draw points 
 	gFrame = cv::Mat::zeros(gray.size(), CV_8UC3);
-	for (size_t i = 0; i < pointClouds.size(); i++)
-	{
+	#ifdef _DEBUG_INTERACTIVE	
+		for (size_t i = 0; i < pointClouds.size(); i++)
+		{
+			drawPoints(pointClouds[i]);
+		}
+		cv::imshow(gEdgeWindowName, gFrame);
+		cv::waitKey(0);
+		std::vector<cv::Scalar> colors;
 		cv::Scalar color(rand() % 255, rand() % 255, rand() % 255);
-		drawPoints(pointClouds[i], color);
-	}
+		for (size_t i = 0; i < pointClouds.size(); i++)
+		{
+			color = cv::Scalar(((int)color[0] + 50 + rand() % 150) % 255, ((int)color[1] + 50 + rand() % 150) % 255, ((int)color[2] + 50 + rand() % 150) % 255);
+			colors.push_back(color);
+		}
+		for (size_t i = 0; i < pointClouds.size(); i++)
+		{
+			drawPoints(pointClouds[i], colors[i]);
+		}
+		cv::imshow(gEdgeWindowName, gFrame);
+		cv::waitKey(0);
+		gFrame = cv::Mat::zeros(gray.size(), CV_8UC3);
+		for (size_t i = 0; i < pointClouds.size(); i++)
+		{
+			drawGroups(pointClouds[i], colors[i]);
+		}
+		cv::imshow(gEdgeWindowName, gFrame);
+		cv::waitKey(0);
+	#endif 
+	#ifndef _DEBUG_INTERACTIVE
+		for (size_t i = 0; i < pointClouds.size(); i++)
+		{
+			drawPoints(pointClouds[i]);
+		}
+	#endif 	
 	//drawQuadtree(quadtree);
 	// Find circles 
 	std::cout << "Detecting circles..." << std::endl;
@@ -294,11 +335,9 @@ void cannyCallback(int slider, void *userData)
 					<< "\tExplained: " << (gTimeSample1 + gTimeSample2 + gTimeIntersection + gTimeAddIntersection + gTimeVisit + gTimeAddCircle) / duration * 100 << "%" << std::endl;
 	#endif 
 	// Draw circles 
-	cv::Scalar color(rand() % 255, rand() % 255, rand() % 255);
 	for (const Circle *circle : circles)
 	{
-		color = cv::Scalar(((int)color[0] + 50 + rand() % 150) % 255, ((int)color[1] + 50 + rand() % 150) % 255, ((int)color[2] + 50 + rand() % 150) % 255);
-		drawCircle(circle, color);
+		drawCircle(circle, cv::Scalar(rand() % 255, rand() % 255, rand() % 255));
 	}
 	// Delete data
 	//delete cell;

@@ -10,43 +10,66 @@
 class ImageUtils
 {
 public:
-	ImageUtils(const cv::Mat &img, int cannyLowThreshold, int cannyRatio = 3, int cannyKernelSize = 3);
+	ImageUtils(const cv::Mat &img, short numAngles, int cannyLowThreshold, int cannyRatio = 3, int cannyKernelSize = 3);
 	
 	~ImageUtils();
 	
 	bool isEdge(int index) const 
 	{
-		return mIsEdges[index];
+		return index >= 0 && index < mEdges.total() && mEdgeIndices[index] != -1;
 	}
 	
-	float sobelAngle(int index) const 
+	int indexOf(int index) const 
 	{
-		float angle = ((float*)mSobelAngle.data)[index];
-		if (angle >= 180)
-			return angle - 180;
-		return angle;
+		return mEdgeIndices[index];
 	}
 	
-	cv::Point2f sobel(int index) const 
+	int numEdges() const 
 	{
-		return cv::Point2f(((float*)mSobelX.data)[index], ((float*)mSobelY.data)[index]);
+		return mNumEdges;
 	}
 	
-	cv::Point2f inverseSobel(int index) const 
+	cv::Point2f position(int edgeIndex) const 
 	{
-		return cv::Point2f(((float*)mInverseSobelX.data)[index], ((float*)mInverseSobelY.data)[index]);
+		int index = mReverseEdgeIndices[edgeIndex];
+		int x = index % mImg.cols;
+		int y = index / mImg.cols;
+		return cv::Point2f(x, y);
 	}
 	
-	float curvature(int index);
+	cv::Point2f sobel(int edgeIndex) const 
+	{
+		return cv::Point2f(((float*)mSobelX.data)[edgeIndex], ((float*)mSobelY.data)[edgeIndex]);
+	}
+	
+	cv::Point2f inverseSobel(int edgeIndex) const 
+	{
+		return cv::Point2f(((float*)mInverseSobelX.data)[edgeIndex], ((float*)mInverseSobelY.data)[edgeIndex]);
+	}
+	
+	float curvature(int edgeIndex);
 	
 	int createConnectedComponents();
 	
-	int labelOf(int index)
+	int labelOf(int edgeIndex)
 	{
-		return mLabels[index];
+		return mLabels[edgeIndex];
+	}
+	
+	int groupPointsByAngle();
+	
+	bool isCentroid(int edgeIndex)
+	{
+		return mGroups[edgeIndex] == edgeIndex;
+	}
+	
+	short angleIndexOf(int edgeIndex)
+	{
+		return mAngleIndices[edgeIndex];
 	}
 	
 private:
+	cv::Mat mImg;
 	cv::Mat mEdges;
 	cv::Mat mSobelX;
 	cv::Mat mSobelY;
@@ -54,14 +77,18 @@ private:
 	cv::Mat mInverseSobelY;
 	cv::Mat mSobelNorm;
 	cv::Mat mSobelAngle;
+	int mNumAngles;
+	int mNumEdges;
+	int *mEdgeIndices;
+	int *mReverseEdgeIndices;
 	float *mNeighborAngles;
-	bool *mIsEdges;
 	int *mLabels;
+	short *mAngleIndices;
+	int *mGroups;
 
-	bool isValid(int index) const 
-	{
-		return index >= 0 && index < mEdges.total() && mEdges.data[index] > 0;
-	}
+	void createEdgeIndices();
+	
+	void createSobel();
 	
 	float angleBetween(int a, int b) const 
 	{
@@ -94,6 +121,16 @@ private:
 	}
 	
 	void calculateNeighborAngles();
+	
+	float sobelAngle(int index) const 
+	{
+		float angle = ((float*)mSobelAngle.data)[index];
+		if (angle >= 180)
+			return angle - 180;
+		return angle;
+	}
+	
+	void calculateAngleIndices();
 	
 };
 

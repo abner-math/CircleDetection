@@ -73,7 +73,7 @@ private:
 	
 	inline size_t normalAngleIndex(size_t point) const 
 	{
-		return mQuadtree->pointCloud()->point(point).normalAngleIndex;
+		return 0;//mQuadtree->pointCloud()->point(point).normalAngleIndex;
 	}
 	
 	inline float getRandomNumber() const

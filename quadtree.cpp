@@ -27,7 +27,7 @@ Quadtree::Quadtree(const PointCloud *pointCloud, size_t minNumPoints, size_t min
 	}
 	for (size_t i = 0; i < pointCloud->numPoints(); i++)
 	{
-		size_t normalAngleIndex = pointCloud->point(i).normalAngleIndex;
+		size_t normalAngleIndex = pointCloud->point(i).angleIndex;
 		if (mPoints[normalAngleIndex].empty())
 			++mNumAngles;
 		mPoints[normalAngleIndex].push_back(i);
