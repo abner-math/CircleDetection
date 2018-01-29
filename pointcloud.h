@@ -9,7 +9,7 @@ struct Point
 	cv::Point2f position; 
 	cv::Point2f normal;
 	cv::Point2f inverseNormal;
-	double normalAngle;
+	float normalAngle;
 	size_t normalAngleIndex;
 	float curvature;
 	
@@ -27,8 +27,13 @@ inline float norm(const cv::Point2f &p)
 class PointCloud
 {
 public:
-	PointCloud(const cv::Mat &img, int cannyLowThreshold, size_t numAngles);
+	static std::vector<PointCloud*> createPointCloudsFromImage(const cv::Mat &img, int cannyLowThreshold, size_t numAngles);
 
+	static size_t getNormalAngleIndex(float normalAngle, size_t numAngles)
+	{
+		return static_cast<size_t>(std::round(normalAngle / (180.0f / numAngles))) % numAngles;
+	}
+	
 	size_t numAngles() const 
 	{
 		return mNumAngles;
@@ -38,6 +43,8 @@ public:
 	{
 		return mPoints.size();
 	}
+	
+	void addPoint(const Point &point);
 	
 	const Point& point(size_t index) const 
 	{
@@ -53,14 +60,8 @@ private:
 	std::vector<Point> mPoints;
 	cv::Rect2f mRect;
 	size_t mNumAngles;
+	Point p;
 				
-	inline size_t getNormalAngleIndex(double normalAngle)
-	{
-		return static_cast<size_t>(std::round(normalAngle / (180.0 / mNumAngles))) % mNumAngles;
-	}
-	
-	double normalizeAngle(double angleDegrees);
-
 	void setExtension();
 	
 };

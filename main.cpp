@@ -34,6 +34,7 @@ cv::Mat gFrame;
 
 #ifdef _BENCHMARK
 double gTimeProcessImage;
+double gTimeCreateConnectedComponents;
 double gTimeCreatePointCloud;
 double gTimeCreateQuadtree;
 double gTimeSample1;
@@ -83,11 +84,11 @@ void drawCircle(const Circle *circle, cv::Scalar color = cv::Scalar(255, 255, 25
 	cv::circle(gFrame, cv::Point((int)circle->center.x, (int)circle->center.y), (int)circle->radius, color, 2); 
 }
 
-void drawPoints(const PointCloud *pointCloud)
+void drawPoints(const PointCloud *pointCloud, cv::Scalar color = cv::Scalar(255, 255, 255))
 {
 	for (size_t i = 0; i < pointCloud->numPoints(); i++)
 	{
-		drawPoint(pointCloud->point(i).position);
+		drawPoint(pointCloud->point(i).position, color);
 	}
 }
   
@@ -227,6 +228,7 @@ void cannyCallback(int slider, void *userData)
 {
 	#ifdef _BENCHMARK
 		gTimeProcessImage = 0;
+		gTimeCreateConnectedComponents = 0;
 		gTimeCreatePointCloud = 0;
 		gTimeCreateQuadtree = 0;
 		gTimeSample1 = 0;
@@ -245,33 +247,39 @@ void cannyCallback(int slider, void *userData)
 	std::cout << "Preprocessing..." << std::endl;
 	auto begin = std::chrono::high_resolution_clock::now();
 	cv::Mat gray = gImgGray.clone();
-	// Calculate normals and curvatures  
-	PointCloud *pointCloud = new PointCloud(gray, gCannyLowThreshold, HOUGH_NUM_ANGLES);
-	Quadtree *quadtree = new Quadtree(pointCloud, QUADTREE_MIN_NUM_POINTS, QUADTREE_MIN_NUM_ANGLES, QUADTREE_MIN_SIZE);
+	// Calculate normals and curvatures 
+	std::vector<PointCloud*> pointClouds = PointCloud::createPointCloudsFromImage(gray, gCannyLowThreshold, HOUGH_NUM_ANGLES);
+	PointCloud *pointCloud = pointClouds[0];
+	/*Quadtree *quadtree = new Quadtree(pointCloud, QUADTREE_MIN_NUM_POINTS, QUADTREE_MIN_NUM_ANGLES, QUADTREE_MIN_SIZE);
 	Sampler *sampler = new Sampler(quadtree, SAMPLER_CLIMB_CHANCE, HOUGH_MIN_ARC_LENGTH);
-	HoughCell *cell = new HoughCell(sampler, HOUGH_BRANCHING_FACTOR, gCirclePrecision, HOUGH_MAX_INTERSECTION_RATIO);
+	HoughCell *cell = new HoughCell(sampler, HOUGH_BRANCHING_FACTOR, gCirclePrecision, HOUGH_MAX_INTERSECTION_RATIO);*/
 	auto end = std::chrono::high_resolution_clock::now();
 	auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
 	std::cout << "Time elapsed: " << duration / 1e6 << "ms" << std::endl;
 	#ifdef _BENCHMARK
 		std::cout << "\tTime to process image: " << gTimeProcessImage / 1e6 << "ms (" << gTimeProcessImage / duration * 100 << "%)" << std::endl
+					<< "\tTime to create connected components: " << gTimeCreateConnectedComponents / 1e6 << "ms (" << gTimeCreateConnectedComponents / duration * 100 << "%)" << std::endl
 					<< "\tTime to create point cloud: " << gTimeCreatePointCloud / 1e6 << "ms (" << gTimeCreatePointCloud / duration * 100 << "%)" << std::endl
 					<< "\tTime to create quadtree: " << gTimeCreateQuadtree / 1e6 << "ms (" << gTimeCreateQuadtree / duration * 100 << "%)" << std::endl
-					<< "\tExplained: " << (gTimeProcessImage + gTimeCreatePointCloud + gTimeCreateQuadtree) / duration * 100 << "%" << std::endl;
+					<< "\tExplained: " << (gTimeProcessImage + gTimeCreateConnectedComponents + gTimeCreatePointCloud + gTimeCreateQuadtree) / duration * 100 << "%" << std::endl;
 	#endif 
 	// Draw points 
 	gFrame = cv::Mat::zeros(gray.size(), CV_8UC3);
-	drawPoints(pointCloud);
+	for (size_t i = 0; i < pointClouds.size(); i++)
+	{
+		cv::Scalar color(rand() % 255, rand() % 255, rand() % 255);
+		drawPoints(pointClouds[i], color);
+	}
 	//drawQuadtree(quadtree);
 	// Find circles 
 	std::cout << "Detecting circles..." << std::endl;
 	begin = std::chrono::high_resolution_clock::now();
 	std::vector<Circle*> circles;
 	#ifdef _DEBUG_INTERACTIVE
-		gActiveCell = cell;
-		gRects.push_back(cell->rect());
+		//gActiveCell = cell;
+		//gRects.push_back(cell->rect());
 	#endif
-	houghTransform(cell, circles);
+	//houghTransform(cell, circles);
 	end = std::chrono::high_resolution_clock::now();
 	duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
 	std::cout << "Time elapsed: " << duration / 1e6 << "ms" << std::endl;
@@ -286,18 +294,22 @@ void cannyCallback(int slider, void *userData)
 					<< "\tExplained: " << (gTimeSample1 + gTimeSample2 + gTimeIntersection + gTimeAddIntersection + gTimeVisit + gTimeAddCircle) / duration * 100 << "%" << std::endl;
 	#endif 
 	// Draw circles 
+	cv::Scalar color(rand() % 255, rand() % 255, rand() % 255);
 	for (const Circle *circle : circles)
 	{
-		cv::Scalar color(rand() % 255, rand() % 255, rand() % 255);
+		color = cv::Scalar(((int)color[0] + 50 + rand() % 150) % 255, ((int)color[1] + 50 + rand() % 150) % 255, ((int)color[2] + 50 + rand() % 150) % 255);
 		drawCircle(circle, color);
 	}
 	// Delete data
-	delete cell;
-	delete quadtree;
-	delete pointCloud;
+	//delete cell;
+	//delete quadtree;
 	for (Circle *circle : circles)
 	{
 		delete circle;
+	}
+	for (size_t i = 0; i < pointClouds.size(); i++)
+	{
+		delete pointClouds[i];
 	}
 	// Display image
 	cv::imshow(gEdgeWindowName, gFrame);

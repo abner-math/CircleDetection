@@ -6,6 +6,7 @@
 #include <chrono>
 
 extern double gTimeProcessImage;
+extern double gTimeCreateConnectedComponents;
 extern double gTimeCreatePointCloud;
 extern double gTimeCreateQuadtree;
 extern double gTimeSample1;
