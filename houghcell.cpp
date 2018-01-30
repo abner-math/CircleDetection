@@ -26,7 +26,6 @@ HoughCell::HoughCell(HoughCell *parent, short indX, short indY)
 	, mIndX(indX)
 	, mIndY(indY)
 	, mVisited(false)
-	, mBlockedPoints(std::vector<Block>(parent->mBlockedPoints.begin(), parent->mBlockedPoints.end()))
 {
 	float newSize = parent->mExtension.size().width / mBranchingFactor;
 	float x = parent->mExtension.tl().x + indX * newSize;
@@ -49,40 +48,12 @@ HoughCell::~HoughCell()
 	delete[] mChildren;
 }
 	
-void HoughCell::createNewBlocks(const std::vector<PointCloud> &pointClouds)
+std::set<HoughAccumulator*> HoughCell::visit()
 {
-	blockPoints(pointClouds);
 	#ifdef _BENCHMARK
 		auto begin = std::chrono::high_resolution_clock::now();
 	#endif
-	for (const PointCloud &pointCloud : pointClouds)
-	{
-		Sampler *sampler = pointCloud.sampler();
-		for (size_t i = 0; i < sampler->numPoints(); i++)
-		{
-			if (sampler->isAvailable(i) && !pointIntersectsRect(pointCloud.group(i)))
-			{
-				Block b;
-				b.sampler = sampler;
-				b.blockedPoint = i;
-				b.substitutePoint = sampler->getSubstitutePoint(i);
-				mBlockedPoints.push_back(b);
-			}
-		}
-	}
-	#ifdef _BENCHMARK
-		auto end = std::chrono::high_resolution_clock::now();
-		gTimeBlockPoints += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
-	#endif 
-}
-	
-std::set<HoughAccumulator*> HoughCell::visit(const std::vector<PointCloud> &pointClouds)
-{
 	mVisited = true;
-	createNewBlocks(pointClouds);
-	#ifdef _BENCHMARK
-		auto begin = std::chrono::high_resolution_clock::now();
-	#endif
 	std::set<HoughAccumulator*> accumulators;
 	for (HoughAccumulator *accumulator : mAccumulators)
 	{
@@ -103,36 +74,6 @@ std::set<HoughAccumulator*> HoughCell::visit(const std::vector<PointCloud> &poin
 void HoughCell::setVisited()
 {
 	mVisited = true;
-}
-
-void HoughCell::blockPoints(const std::vector<PointCloud> &pointClouds)
-{
-	#ifdef _BENCHMARK
-		auto begin = std::chrono::high_resolution_clock::now();
-	#endif
-	for (Block &b : mBlockedPoints)
-	{
-		b.sampler->blockPoint(b.blockedPoint, b.substitutePoint);
-	}
-	#ifdef _BENCHMARK
-		auto end = std::chrono::high_resolution_clock::now();
-		gTimeBlockPoints += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
-	#endif 
-}
-
-void HoughCell::unblockPoints(const std::vector<PointCloud> &pointClouds)
-{
-	#ifdef _BENCHMARK
-		auto begin = std::chrono::high_resolution_clock::now();
-	#endif
-	for (Block &b : mBlockedPoints)
-	{
-		b.sampler->unblockPoint(b.blockedPoint);
-	}
-	#ifdef _BENCHMARK
-		auto end = std::chrono::high_resolution_clock::now();
-		gTimeBlockPoints += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
-	#endif 
 }
 
 HoughAccumulator* HoughCell::addIntersection(Sampler *sampler)
@@ -237,6 +178,8 @@ bool HoughCell::intersectionBetweenPoints(Sampler *sampler, const std::pair<size
 
 HoughAccumulator* HoughCell::accumulate(const Intersection &intersection)
 {
+	//intersection.sampler->removePoint(intersection.p1);
+	//intersection.sampler->removePoint(intersection.p2);
 	HoughAccumulator *chosenAccumulator = NULL;
 	for (HoughAccumulator *accumulator : mAccumulators)
 	{
@@ -263,10 +206,12 @@ HoughAccumulator* HoughCell::addIntersection(const Intersection &intersection)
 		short childIndex = getChildIndex(intersection.position, indX, indY);
 		if (mChildren[childIndex] == NULL)
 			mChildren[childIndex] = new HoughCell(this, indX, indY);
-		if (!mChildren[childIndex]->isVisited())
+		if (mChildren[childIndex]->isVisited())
 		{
-			intersection.sampler->removePoint(intersection.p1);
-			intersection.sampler->removePoint(intersection.p2);
+			mChildren[childIndex]->addIntersection(intersection);
+		}
+		else
+		{
 			return mChildren[childIndex]->accumulate(intersection);
 		}
 	}

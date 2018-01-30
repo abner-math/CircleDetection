@@ -3,13 +3,6 @@
 
 #include "houghaccumulator.h"
 
-struct Block
-{
-	Sampler *sampler;
-	size_t blockedPoint;
-	size_t substitutePoint;
-};
-
 class HoughCell 
 {
 public: 
@@ -54,23 +47,19 @@ public:
 		return mExtension;
 	}
 	
-	bool isVisited() const 
-	{
-		return mVisited;
-	}
-	
 	const short minArcLength() const 
 	{
 		return mMinArcLength;
 	}
 	
-	std::set<HoughAccumulator*> visit(const std::vector<PointCloud> &pointClouds);
+	bool isVisited() const 
+	{
+		return mVisited;
+	}
+	
+	std::set<HoughAccumulator*> visit();
 	
 	void setVisited();
-	
-	void blockPoints(const std::vector<PointCloud> &pointClouds);
-	
-	void unblockPoints(const std::vector<PointCloud> &pointClouds);
 	
 	HoughAccumulator* addIntersection(Sampler *sampler);
 	
@@ -85,10 +74,7 @@ private:
 	short mIndX, mIndY;
 	bool mVisited;
 	std::vector<HoughAccumulator*> mAccumulators;
-	std::vector<Block> mBlockedPoints;
 		
-	void createNewBlocks(const std::vector<PointCloud> &pointClouds);
-	
 	// reference: https://tavianator.com/fast-branchless-raybounding-box-intersections/
 	bool pointIntersectsRect(const Point &p);
 	

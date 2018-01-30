@@ -35,7 +35,6 @@ double gTimeSample1;
 double gTimeSample2;
 double gTimeIntersection;
 double gTimeAddIntersection;
-double gTimeBlockPoints;
 double gTimeVisit;
 double gTimeAddCircle;
 double gTimeDebug;
@@ -95,18 +94,6 @@ void drawGroups(const PointCloud &pointCloud, cv::Scalar color = cv::Scalar(255,
 	}
 }
   
-void drawQuadtree(const Quadtree *quadtree)
-{
-	drawRect(quadtree->rect(), cv::Scalar(0, 255, 0));
-	for (size_t i = 0; i < 4; i++)
-	{
-		if (quadtree->child(i) != NULL)   
-		{ 
-			drawQuadtree(quadtree->child(i));  
-		}
-	}
-}
-
 #ifdef _DEBUG_INTERACTIVE
 void displayInteractiveFrame(const std::vector<PointCloud> &pointClouds)
 {
@@ -124,10 +111,6 @@ void displayInteractiveFrame(const std::vector<PointCloud> &pointClouds)
 			if (sampler->isRemoved(i))
 			{
 				drawPoint(pointCloud.group(i).position, cv::Scalar(0, 0, 255));
-			}
-			else if (sampler->isBlocked(i))
-			{
-				drawPoint(pointCloud.group(i).position, cv::Scalar(150, 150, 150));
 			}
 		}
 	}
@@ -207,11 +190,12 @@ void subdivide(HoughAccumulator *accumulator, const std::vector<PointCloud> &poi
 {
 	HoughCell *cell = accumulator->cell();
 	#ifdef _DEBUG_INTERACTIVE
+		gActiveCell = cell;
 		gRects.push_back(cell->extension());
 	#endif
 	if (cell->cellSize() > cell->minCellSize())
 	{
-		for (HoughAccumulator *childAccumulator : cell->visit(pointClouds))
+		for (HoughAccumulator *childAccumulator : cell->visit())
 		{
 			if (childAccumulator->hasCircleCandidate())
 			{
@@ -234,7 +218,6 @@ void subdivide(HoughAccumulator *accumulator, const std::vector<PointCloud> &poi
 			gTimeAddCircle += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
 		#endif 
 		#ifdef _DEBUG_INTERACTIVE
-			gActiveCell = cell;
 			gCircles.push_back(circle);
 			displayInteractiveFrame(pointClouds);
 		#endif
@@ -243,12 +226,11 @@ void subdivide(HoughAccumulator *accumulator, const std::vector<PointCloud> &poi
  
 void houghTransform(HoughCell *cell, const std::vector<PointCloud> &pointClouds, std::vector<Circle> &circles)
 {
-	cell->blockPoints(pointClouds);
 	for (const PointCloud &pointCloud : pointClouds)
 	{
 		Sampler *sampler = pointCloud.sampler();
 		size_t numSamples = 0;
-		while (sampler->canSample() && ++numSamples < sampler->numPoints())
+		while (sampler->canSample() && numSamples < 2*sampler->numPoints())
 		{
 			HoughAccumulator *accumulator = cell->addIntersection(sampler);
 			if (accumulator != NULL)
@@ -260,14 +242,12 @@ void houghTransform(HoughCell *cell, const std::vector<PointCloud> &pointClouds,
 				#endif
 				if (accumulator->hasCircleCandidate())
 				{
-					cell->unblockPoints(pointClouds);
 					subdivide(accumulator, pointClouds, circles);
-					cell->blockPoints(pointClouds);
 				}
 			}
+			++numSamples;
 		}
 	}
-	cell->unblockPoints(pointClouds);
 } 
  
 void cannyCallback(int slider, void *userData)
@@ -282,7 +262,6 @@ void cannyCallback(int slider, void *userData)
 		gTimeSample2 = 0;
 		gTimeIntersection = 0;
 		gTimeAddIntersection = 0;
-		gTimeBlockPoints = 0;
 		gTimeVisit = 0;
 		gTimeAddCircle = 0;
 		gTimeDebug = 0;
@@ -302,7 +281,7 @@ void cannyCallback(int slider, void *userData)
 	std::cout << "Extension: " << extension << std::endl;
 	for (PointCloud &pointCloud : pointClouds)
 	{
-		pointCloud.createSampler(gMinArcLength);
+		pointCloud.createSampler(gMinArcLength, gMinCellSize);
 	}
 	HoughCell *cell = new HoughCell(extension, gMinArcLength, gMinCellSize, gCellBranchingFactor);
 	auto end = std::chrono::high_resolution_clock::now();
@@ -345,12 +324,6 @@ void cannyCallback(int slider, void *userData)
 		}
 		cv::imshow(gEdgeWindowName, gFrame);
 		cv::waitKey(0);
-		for (PointCloud &pointCloud : pointClouds)
-		{
-			drawQuadtree(&pointCloud.sampler()->quadtree());
-		}
-		cv::imshow(gEdgeWindowName, gFrame);
-		cv::waitKey(0);
 		gFrame = cv::Mat::zeros(gray.size(), CV_8UC3);
 		for (size_t i = 0; i < pointClouds.size(); i++)
 		{
@@ -380,11 +353,10 @@ void cannyCallback(int slider, void *userData)
 						<< "\t\tFirst point: " << gTimeSample1 / 1e6 << "ms (" << gTimeSample1 / duration * 100 << "%); Second point: " << gTimeSample2 / 1e6 << "ms (" << gTimeSample2 / duration * 100 << "%)" << std::endl
 					<< "\tTime to calculate intersection: " << gTimeIntersection / 1e6 << "ms (" << gTimeIntersection / duration * 100 << "%)" << std::endl
 					<< "\tTime to add intersection: " << gTimeAddIntersection / 1e6 << "ms (" << gTimeAddIntersection / duration * 100 << "%)" << std::endl
-					<< "\tTime to block points: " << gTimeBlockPoints / 1e6 << "ms (" << gTimeBlockPoints / duration * 100 << "%)" << std::endl
 					<< "\tTime to visit cell: " << gTimeVisit / 1e6 << "ms (" << gTimeVisit / duration * 100 << "%)" << std::endl
 					<< "\tTime to add circle: " << gTimeAddCircle / 1e6 << "ms (" << gTimeAddCircle / duration * 100 << "%)" << std::endl
 					<< "\tTime debug: " << gTimeDebug / 1e6 << "ms (" << gTimeDebug / duration * 100 << "%)" << std::endl
-					<< "\tExplained: " << (gTimeSample1 + gTimeSample2 + gTimeIntersection + gTimeAddIntersection + gTimeBlockPoints + gTimeVisit + gTimeAddCircle) / duration * 100 << "%" << std::endl;
+					<< "\tExplained: " << (gTimeSample1 + gTimeSample2 + gTimeIntersection + gTimeAddIntersection + gTimeVisit + gTimeAddCircle) / duration * 100 << "%" << std::endl;
 	#endif 
 	// Draw circles 
 	for (const Circle &circle : circles)

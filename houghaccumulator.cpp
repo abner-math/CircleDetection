@@ -32,7 +32,7 @@ void HoughAccumulator::accumulate(const Intersection &intersection)
 
 bool HoughAccumulator::hasCircleCandidate() const 
 {
-	return mAngles.size() >= mCell->minArcLength() && mIntersections.size() > 4;
+	return mAngles.size() >= mCell->minArcLength() && mIntersections.size() > mCell->minArcLength();
 }
 
 Circle HoughAccumulator::getCircleCandidate() const 

@@ -14,7 +14,6 @@ extern double gTimeSample1;
 extern double gTimeSample2;
 extern double gTimeIntersection;
 extern double gTimeAddIntersection;
-extern double gTimeBlockPoints;
 extern double gTimeVisit;
 extern double gTimeAddCircle;
 extern double gTimeDebug;

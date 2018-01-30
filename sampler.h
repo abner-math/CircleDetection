@@ -4,7 +4,10 @@
 #include <random>
 #include <set>
 
-#include "quadtree.h"
+#include <boost/random.hpp>
+#include <boost/generator_iterator.hpp>
+
+#include "pointcloud.h"
 
 class Sampler
 {
@@ -33,11 +36,6 @@ public:
 		return mPointCloud;
 	}
 	
-	const Quadtree& quadtree() const 
-	{
-		return mQuadtree;
-	}
-	
 	short minArcLength() const 
 	{
 		return mMinArcLength;
@@ -51,33 +49,19 @@ public:
 	
 	bool isRemoved(size_t point) const
 	{
-		return mRemovedPoints[point];
+		return mPoints[point] != point;
 	}
-	
-	void blockPoint(size_t point, size_t newPoint);
-	
-	void unblockPoint(size_t point);
-	
-	bool isBlocked(size_t point) const 
-	{
-		return mBlockedPoints[point];
-	}
-	
-	bool isAvailable(size_t point) const 
-	{
-		return !isRemoved(point) && !isBlocked(point);
-	}
-	
-	size_t getSubstitutePoint(size_t point);
 	
 private:
+	static boost::mt19937 sRNG;
+	static boost::exponential_distribution<float> sDistribution;
+	static boost::variate_generator<boost::mt19937, boost::exponential_distribution<float> > sGenerator;
 	const PointCloud &mPointCloud;
 	const short mMinArcLength;
-	Quadtree mQuadtree;
 	size_t *mPoints;
+	size_t **mPointsPerAngle;
+	size_t *mTotalNumPointsPerAngle;
 	size_t *mNumPointsPerAngle;
-	bool *mRemovedPoints;
-	bool *mBlockedPoints;
 	size_t mNumEmptyAngles;
 	size_t mNumAvailablePoints;
 	
@@ -100,11 +84,23 @@ private:
 		return angle + 1;
 	}
 	
-	size_t getValidPoint(const std::vector<size_t> &points) const;
+	size_t selectRandomPointWithAngle(short angle);
 	
-	size_t getValidPoint(const Quadtree *node, short angle) const;
+	size_t selectRandomPointWithValidAngle(short angle);
 	
 	size_t selectRandomPoint();
+	
+	size_t selectAnotherRandomPoint(size_t point);
+	
+	static float getRandomValueFromExponentialDist()  
+	{
+		float value;
+		do
+		{
+			value = sGenerator();
+		} while (value >= 1.0f);
+		return value;
+	}
 	
 };
 
