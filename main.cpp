@@ -35,6 +35,7 @@ double gTimeSample1;
 double gTimeSample2;
 double gTimeIntersection;
 double gTimeAddIntersection;
+double gTimeBlockPoints;
 double gTimeVisit;
 double gTimeAddCircle;
 double gTimeDebug;
@@ -153,11 +154,51 @@ void displayInteractiveFrame(const std::vector<PointCloud> &pointClouds)
 }
 #endif 
 
-
-bool isPointOnCircle(HoughCell *cell, const Circle &circle, const cv::Point2f &point)
+bool isPointOnCircle(const HoughCell *cell, const Circle &circle, const cv::Point2f &point)
 {
 	float dist = norm(point - circle.center);
 	return std::abs(dist - circle.radius) < cell->minCellSize();
+}
+
+bool circleIntersectsRect(const Circle &circle, const cv::Rect2f &rect)
+{
+	cv::Rect2f boundingBox(circle.center.x - circle.radius, circle.center.y - circle.radius, circle.radius * 2, circle.radius * 2);
+	cv::Point2f boundingBoxCorners[4] = {
+		cv::Point2f(boundingBox.x, boundingBox.y),
+		cv::Point2f(boundingBox.x, boundingBox.y + boundingBox.height),
+		cv::Point2f(boundingBox.x + boundingBox.width, boundingBox.y),
+		cv::Point2f(boundingBox.x + boundingBox.width, boundingBox.y + boundingBox.height)
+	};
+	cv::Point2f rectCorners[4] = {
+		cv::Point2f(rect.x, rect.y),
+		cv::Point2f(rect.x, rect.y + rect.height),
+		cv::Point2f(rect.x + rect.width, rect.y),
+		cv::Point2f(rect.x + rect.width, rect.y + rect.height)
+	};
+	for (size_t i = 0; i < 4; i++)
+	{
+		if (rect.contains(boundingBoxCorners[i]) || boundingBox.contains(rectCorners[i]))
+			return true;
+	}
+	return false;
+}
+
+void removeCirclePoints(const HoughCell *cell, const Circle &circle, const std::vector<PointCloud> &pointClouds)
+{
+	for (const PointCloud &pointCloud : pointClouds)
+	{
+		if (circleIntersectsRect(circle, pointCloud.extension()))
+		{
+			Sampler *sampler = pointCloud.sampler();
+			for (size_t i = 0; i < sampler->numPoints(); i++)
+			{
+				if (!sampler->isRemoved(i) && isPointOnCircle(cell, circle, pointCloud.group(i).position))
+				{
+					sampler->removePoint(i);
+				}
+			}
+		}
+	}
 }
 
 void houghTransform(HoughCell *cell, const std::vector<PointCloud> &pointClouds, std::vector<Circle> &circles);
@@ -170,8 +211,7 @@ void subdivide(HoughAccumulator *accumulator, const std::vector<PointCloud> &poi
 	#endif
 	if (cell->cellSize() > cell->minCellSize())
 	{
-		// block points here...
-		for (HoughAccumulator *childAccumulator : cell->visit())
+		for (HoughAccumulator *childAccumulator : cell->visit(pointClouds))
 		{
 			if (childAccumulator->hasCircleCandidate())
 			{
@@ -186,38 +226,29 @@ void subdivide(HoughAccumulator *accumulator, const std::vector<PointCloud> &poi
 			auto begin = std::chrono::high_resolution_clock::now();
 		#endif
 		Circle circle = accumulator->getCircleCandidate();
-		for (const PointCloud &pointCloud : pointClouds)
-		{
-			Sampler *sampler = pointCloud.sampler();
-			for (size_t i = 0; i < sampler->numPoints(); i++)
-			{
-				if (!sampler->isRemoved(i) && isPointOnCircle(cell, circle, pointCloud.group(i).position))
-				{
-					sampler->removePoint(i);
-				}
-			}
-		}
+		circles.push_back(circle);
+		cell->setVisited();
+		removeCirclePoints(cell, circle, pointClouds);
+		#ifdef _BENCHMARK
+			auto end = std::chrono::high_resolution_clock::now();
+			gTimeAddCircle += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+		#endif 
 		#ifdef _DEBUG_INTERACTIVE
 			gActiveCell = cell;
 			gCircles.push_back(circle);
 			displayInteractiveFrame(pointClouds);
 		#endif
-		circles.push_back(circle);
-		cell->setVisited();
-		#ifdef _BENCHMARK
-			auto end = std::chrono::high_resolution_clock::now();
-			gTimeAddCircle += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
-		#endif 
 	}
 }
  
 void houghTransform(HoughCell *cell, const std::vector<PointCloud> &pointClouds, std::vector<Circle> &circles)
 {
+	cell->blockPoints(pointClouds);
 	for (const PointCloud &pointCloud : pointClouds)
 	{
 		Sampler *sampler = pointCloud.sampler();
 		size_t numSamples = 0;
-		while (sampler->canSample() && numSamples < sampler->numAvailablePoints())
+		while (sampler->canSample() && ++numSamples < sampler->numPoints())
 		{
 			HoughAccumulator *accumulator = cell->addIntersection(sampler);
 			if (accumulator != NULL)
@@ -229,12 +260,14 @@ void houghTransform(HoughCell *cell, const std::vector<PointCloud> &pointClouds,
 				#endif
 				if (accumulator->hasCircleCandidate())
 				{
+					cell->unblockPoints(pointClouds);
 					subdivide(accumulator, pointClouds, circles);
+					cell->blockPoints(pointClouds);
 				}
 			}
-			++numSamples;
 		}
 	}
+	cell->unblockPoints(pointClouds);
 } 
  
 void cannyCallback(int slider, void *userData)
@@ -249,6 +282,7 @@ void cannyCallback(int slider, void *userData)
 		gTimeSample2 = 0;
 		gTimeIntersection = 0;
 		gTimeAddIntersection = 0;
+		gTimeBlockPoints = 0;
 		gTimeVisit = 0;
 		gTimeAddCircle = 0;
 		gTimeDebug = 0;
@@ -346,10 +380,11 @@ void cannyCallback(int slider, void *userData)
 						<< "\t\tFirst point: " << gTimeSample1 / 1e6 << "ms (" << gTimeSample1 / duration * 100 << "%); Second point: " << gTimeSample2 / 1e6 << "ms (" << gTimeSample2 / duration * 100 << "%)" << std::endl
 					<< "\tTime to calculate intersection: " << gTimeIntersection / 1e6 << "ms (" << gTimeIntersection / duration * 100 << "%)" << std::endl
 					<< "\tTime to add intersection: " << gTimeAddIntersection / 1e6 << "ms (" << gTimeAddIntersection / duration * 100 << "%)" << std::endl
+					<< "\tTime to block points: " << gTimeBlockPoints / 1e6 << "ms (" << gTimeBlockPoints / duration * 100 << "%)" << std::endl
 					<< "\tTime to visit cell: " << gTimeVisit / 1e6 << "ms (" << gTimeVisit / duration * 100 << "%)" << std::endl
 					<< "\tTime to add circle: " << gTimeAddCircle / 1e6 << "ms (" << gTimeAddCircle / duration * 100 << "%)" << std::endl
 					<< "\tTime debug: " << gTimeDebug / 1e6 << "ms (" << gTimeDebug / duration * 100 << "%)" << std::endl
-					<< "\tExplained: " << (gTimeSample1 + gTimeSample2 + gTimeIntersection + gTimeAddIntersection + gTimeVisit + gTimeAddCircle) / duration * 100 << "%" << std::endl;
+					<< "\tExplained: " << (gTimeSample1 + gTimeSample2 + gTimeIntersection + gTimeAddIntersection + gTimeBlockPoints + gTimeVisit + gTimeAddCircle) / duration * 100 << "%" << std::endl;
 	#endif 
 	// Draw circles 
 	for (const Circle &circle : circles)

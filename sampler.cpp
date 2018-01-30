@@ -66,11 +66,11 @@ void Sampler::removePoint(size_t point)
 	--mNumAvailablePoints;
 }
 
-void Sampler::blockPoint(size_t point)
+void Sampler::blockPoint(size_t point, size_t newPoint)
 {
 	if (isBlocked(point)) return;
 	mBlockedPoints[point] = true;
-	mPoints[point] = getSubstitutePoint(point);
+	mPoints[point] = newPoint;
 	if (--mNumPointsPerAngle[angleIndex(point)] == 0)
 		++mNumEmptyAngles;
 	--mNumAvailablePoints;

@@ -54,7 +54,7 @@ public:
 		return mRemovedPoints[point];
 	}
 	
-	void blockPoint(size_t point);
+	void blockPoint(size_t point, size_t newPoint);
 	
 	void unblockPoint(size_t point);
 	
@@ -67,6 +67,8 @@ public:
 	{
 		return !isRemoved(point) && !isBlocked(point);
 	}
+	
+	size_t getSubstitutePoint(size_t point);
 	
 private:
 	const PointCloud &mPointCloud;
@@ -101,8 +103,6 @@ private:
 	size_t getValidPoint(const std::vector<size_t> &points) const;
 	
 	size_t getValidPoint(const Quadtree *node, short angle) const;
-	
-	size_t getSubstitutePoint(size_t point);
 	
 	size_t selectRandomPoint();
 	
