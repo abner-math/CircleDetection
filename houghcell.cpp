@@ -2,39 +2,36 @@
 
 #include <iostream>
 
-HoughCell::HoughCell(Sampler *sampler, size_t branchingFactor, float minCellSize,
-			float maxIntersectionRatio)
-	: mPointCloud(sampler->quadtree()->pointCloud())
-	, mBranchingFactor(branchingFactor)
+HoughCell::HoughCell(const cv::Rect &extension, short minArcLength,
+		float minCellSize, short branchingFactor, float maxIntersectionRatio)
+	: mMinArcLength(minArcLength)
 	, mMinCellSize(minCellSize)
+	, mBranchingFactor(branchingFactor)
 	, mMaxIntersectionRatio(maxIntersectionRatio)
 	, mParent(this)
-	, mChildren(std::vector<HoughCell*>(branchingFactor * branchingFactor, NULL))
-	, mSampler(sampler)
-	, mRect(sampler->quadtree()->pointCloud()->extension())
+	, mExtension(extension)
 	, mIndX(0)
 	, mIndY(0)
 	, mVisited(false)
 { 
-	
+	mChildren = (HoughCell**)calloc(branchingFactor * branchingFactor, sizeof(HoughCell*));
 }
 
-HoughCell::HoughCell(HoughCell *parent, size_t indX, size_t indY)
-	: mPointCloud(parent->mPointCloud)
-	, mBranchingFactor(parent->mBranchingFactor)
+HoughCell::HoughCell(HoughCell *parent, short indX, short indY)
+	: mMinArcLength(parent->mMinArcLength)
 	, mMinCellSize(parent->mMinCellSize)
+	, mBranchingFactor(parent->mBranchingFactor)
 	, mMaxIntersectionRatio(parent->mMaxIntersectionRatio)
 	, mParent(parent)
-	, mChildren(std::vector<HoughCell*>(mBranchingFactor * mBranchingFactor, NULL))
-	, mSampler(NULL)
 	, mIndX(indX)
 	, mIndY(indY)
 	, mVisited(false)
 {
-	float newSize = parent->mRect.size().width / mBranchingFactor;
-	float x = parent->mRect.tl().x + indX * newSize;
-	float y = parent->mRect.tl().y + indY * newSize;
-	mRect = cv::Rect2f(x, y, newSize, newSize);
+	float newSize = parent->mExtension.size().width / mBranchingFactor;
+	float x = parent->mExtension.tl().x + indX * newSize;
+	float y = parent->mExtension.tl().y + indY * newSize;
+	mExtension = cv::Rect2f(x, y, newSize, newSize);
+	mChildren = (HoughCell**)calloc(mBranchingFactor * mBranchingFactor, sizeof(HoughCell*));
 }
 
 HoughCell::~HoughCell()
@@ -43,13 +40,12 @@ HoughCell::~HoughCell()
 	{
 		delete accumulator;
 	}
-	if (mSampler != NULL)
-		delete mSampler;
 	for (size_t i = 0, end = mBranchingFactor * mBranchingFactor; i < end; i++)
 	{
 		if (mChildren[i] != NULL)
 			delete mChildren[i];
 	}
+	delete[] mChildren;
 }
 
 std::set<HoughAccumulator*> HoughCell::visit()
@@ -58,12 +54,6 @@ std::set<HoughAccumulator*> HoughCell::visit()
 		auto begin = std::chrono::high_resolution_clock::now();
 	#endif
 	mVisited = true;
-	mSampler = new Sampler(*mParent->mSampler);
-	for (size_t i = 0; i < mPointCloud->numPoints(); i++)
-	{
-		if (!mSampler->isRemoved(i) && !pointIntersectsRect(mPointCloud->point(i)))
-			mSampler->removePoint(i);
-	}
 	std::set<HoughAccumulator*> accumulators;
 	for (HoughAccumulator *accumulator : mAccumulators)
 	{
@@ -86,11 +76,11 @@ void HoughCell::setVisited()
 	mVisited = true;
 }
 
-HoughAccumulator* HoughCell::addIntersection()
+HoughAccumulator* HoughCell::addIntersection(Sampler *sampler)
 {
-	std::pair<size_t, size_t> sample = mSampler->sample();
+	std::pair<size_t, size_t> sample = sampler->sample();
 	Intersection intersection;
-	if (intersectionBetweenPoints(sample, intersection))
+	if (intersectionBetweenPoints(sampler, sample, intersection))
 	{
 		#ifdef _BENCHMARK
 			auto begin = std::chrono::high_resolution_clock::now();
@@ -108,14 +98,14 @@ HoughAccumulator* HoughCell::addIntersection()
 
 bool HoughCell::pointIntersectsRect(const Point &p)
 {
-	float tx1 = (mRect.tl().x - p.position.x) * p.inverseNormal.x;
-	float tx2 = (mRect.br().x - p.position.x) * p.inverseNormal.x;
+	float tx1 = (mExtension.tl().x - p.position.x) * p.inverseNormal.x;
+	float tx2 = (mExtension.br().x - p.position.x) * p.inverseNormal.x;
  
 	float tmin = std::min(tx1, tx2);
 	float tmax = std::max(tx1, tx2);
  
-	float ty1 = (mRect.tl().y - p.position.y) * p.inverseNormal.y;
-	float ty2 = (mRect.br().y - p.position.y) * p.inverseNormal.y;
+	float ty1 = (mExtension.tl().y - p.position.y) * p.inverseNormal.y;
+	float ty2 = (mExtension.br().y - p.position.y) * p.inverseNormal.y;
  
 	tmin = std::max(tmin, std::min(ty1, ty2));
 	tmax = std::min(tmax, std::max(ty1, ty2));
@@ -123,13 +113,13 @@ bool HoughCell::pointIntersectsRect(const Point &p)
 	return tmax >= tmin;
 }
 
-bool HoughCell::intersectionBetweenPoints(const std::pair<size_t, size_t> &sample, Intersection &intersection)
+bool HoughCell::intersectionBetweenPoints(Sampler *sampler, const std::pair<size_t, size_t> &sample, Intersection &intersection)
 {
 	#ifdef _BENCHMARK
 		auto begin = std::chrono::high_resolution_clock::now();
 	#endif
-	const Point &p1 = mPointCloud->point(sample.first);
-	const Point &p2 = mPointCloud->point(sample.second);
+	const Point &p1 = sampler->pointCloud().group(sample.first);
+	const Point &p2 = sampler->pointCloud().group(sample.second);
 	
 	cv::Point2f a = p1.position;
 	cv::Point2f b = p1.position + p1.normal;
@@ -174,6 +164,7 @@ bool HoughCell::intersectionBetweenPoints(const std::pair<size_t, size_t> &sampl
 		return false; 
 	}
 	
+	intersection.sampler = sampler;
 	intersection.p1 = sample.first;
 	intersection.p2 = sample.second;
 	intersection.position = position; 
@@ -207,23 +198,21 @@ HoughAccumulator* HoughCell::accumulate(const Intersection &intersection)
 
 HoughAccumulator* HoughCell::addIntersection(const Intersection &intersection)
 {
-	if (mRect.contains(intersection.position))
+	if (mExtension.contains(intersection.position))
 	{
-		size_t indX, indY;
-		size_t childIndex = getChildIndex(intersection.position, indX, indY);
+		short indX, indY;
+		short childIndex = getChildIndex(intersection.position, indX, indY);
 		if (mChildren[childIndex] == NULL)
 			mChildren[childIndex] = new HoughCell(this, indX, indY);
 		if (!mChildren[childIndex]->isVisited())
 		{
-			mSampler->removePointFromAll(intersection.p1);
-			mSampler->removePointFromAll(intersection.p2);
+			intersection.sampler->removePoint(intersection.p1);
+			intersection.sampler->removePoint(intersection.p2);
 			return mChildren[childIndex]->accumulate(intersection);
 		}
 	}
 	else if (mParent != this)
 	{
-		//mSampler->removePoint(intersection.p1);
-		//mSampler->removePoint(intersection.p2);
 		return mParent->addIntersection(intersection);
 	}
 	return NULL;

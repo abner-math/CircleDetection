@@ -9,7 +9,7 @@ extern double gTimeProcessImage;
 extern double gTimeCreateConnectedComponents;
 extern double gTimeGroupPoints;
 extern double gTimeCreatePointCloud;
-extern double gTimeCreateQuadtree;
+extern double gTimeCreateSampler;
 extern double gTimeSample1;
 extern double gTimeSample2;
 extern double gTimeIntersection;

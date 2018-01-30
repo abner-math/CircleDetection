@@ -2,41 +2,36 @@
 
 #include <iostream>
 
-Quadtree::Quadtree(const PointCloud *pointCloud, size_t minNumPoints, size_t minNumAngles, float minSize)
+Quadtree::Quadtree(const PointCloud &pointCloud, float minSize)
 	: mPointCloud(pointCloud)
-	, mMinNumPoints(minNumPoints)
-	, mMinNumAngles(minNumAngles)
 	, mMinSize(minSize)
 	, mRoot(this)
 	, mParent(NULL)
-	, mChildren(std::vector<Quadtree*>(4, NULL))
 	, mIsLeaf(true)
-	, mPoints(std::vector<std::vector<size_t> >(pointCloud->numAngles()))
-	, mNumPoints(pointCloud->numPoints())
+	, mPoints(std::vector<std::vector<size_t> >(pointCloud.numAngles()))
+	, mNumPoints(pointCloud.numPoints())
 	, mNumAngles(0)
 {
-	#ifdef _BENCHMARK
-		auto begin = std::chrono::high_resolution_clock::now();
-	#endif 
-	mCenter = pointCloud->extension().tl() + (pointCloud->extension().br() - pointCloud->extension().tl()) / 2;
-	mSize = std::max(pointCloud->extension().width, pointCloud->extension().height) / 2;
-	mLeaves = new std::vector<Quadtree*>(pointCloud->numPoints(), this);
-	for (size_t i = 0; i < pointCloud->numAngles(); i++)
+	mCenter = pointCloud.extension().tl() + (pointCloud.extension().br() - pointCloud.extension().tl()) / 2;
+	mSize = std::max(pointCloud.extension().width, pointCloud.extension().height);
+	mLeaves = new Quadtree*[pointCloud.numGroups()];
+	for (short i = 0; i < pointCloud.numAngles(); i++)
 	{
-		mPoints[i].reserve(pointCloud->numPoints());
+		mPoints[i].reserve(pointCloud.numGroups());
 	}
-	for (size_t i = 0; i < pointCloud->numPoints(); i++)
+	for (size_t i = 0; i < pointCloud.numGroups(); i++)
 	{
-		size_t normalAngleIndex = pointCloud->point(i).angleIndex;
-		if (mPoints[normalAngleIndex].empty())
+		short angleIndex = pointCloud.group(i).angleIndex;
+		if (mPoints[angleIndex].empty())
 			++mNumAngles;
-		mPoints[normalAngleIndex].push_back(i);
+		mPoints[angleIndex].push_back(i);
+		mLeaves[i] = this;
+	}
+	for (size_t i = 0; i < 4; i++)
+	{
+		mChildren[i] = NULL;
 	}
 	build();
-	#ifdef _BENCHMARK
-		auto end = std::chrono::high_resolution_clock::now();
-		gTimeCreateQuadtree += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
-	#endif 
 }
 
 Quadtree::~Quadtree()
@@ -49,36 +44,37 @@ Quadtree::~Quadtree()
 		}
 	}
 	if (mLeaves != NULL)
-		delete mLeaves;
+		delete[] mLeaves;
 }
 
 Quadtree::Quadtree(Quadtree *parent)
 	: mPointCloud(parent->mPointCloud)
-	, mMinNumPoints(parent->mMinNumPoints)
-	, mMinNumAngles(parent->mMinNumAngles)
 	, mMinSize(parent->mMinSize)
 	, mRoot(parent->mRoot)
 	, mParent(parent)
-	, mChildren(std::vector<Quadtree*>(4, NULL))
 	, mIsLeaf(true)
 	, mLeaves(NULL)
-	, mPoints(std::vector<std::vector<size_t> >(parent->mPointCloud->numAngles()))
+	, mPoints(std::vector<std::vector<size_t> >(parent->mPointCloud.numAngles()))
 	, mNumPoints(0)
 	, mNumAngles(0)
 {
 	mParent->mIsLeaf = false;
+	for (size_t i = 0; i < 4; i++)
+	{
+		mChildren[i] = NULL;
+	}
 }
 
 void Quadtree::build()
 {
-	if (mNumPoints <= mMinNumPoints || mNumAngles < mMinNumAngles || mSize < mMinSize) return;
+	if (mNumPoints < 10 || mNumAngles < 2 || mSize < mMinSize) return;
 	float halfSize = mSize / 2;
 	float quarterSize = mSize / 4;
-	for (size_t angle = 0; angle < mPointCloud->numAngles(); angle++)
+	for (short angle = 0; angle < mPointCloud.numAngles(); angle++)
 	{
 		for (const size_t &point : mPoints[angle])
 		{
-			size_t index = ((mPointCloud->point(point).position.x > mCenter.x) << 1) | (mPointCloud->point(point).position.y > mCenter.y);
+			size_t index = ((mPointCloud.group(point).position.x > mCenter.x) << 1) | (mPointCloud.group(point).position.y > mCenter.y);
 			if (mChildren[index] == NULL)
 			{
 				mChildren[index] = new Quadtree(this);
@@ -90,7 +86,7 @@ void Quadtree::build()
 				++mChildren[index]->mNumAngles;
 			mChildren[index]->mPoints[angle].push_back(point);
 			++mChildren[index]->mNumPoints;
-			(*mRoot->mLeaves)[point] = mChildren[index];
+			mRoot->mLeaves[point] = mChildren[index];
 		}
 	}
 	for (size_t i = 0; i < 4; i++)

@@ -26,8 +26,8 @@ void HoughAccumulator::accumulate(const Intersection &intersection)
 {
 	mRadius.insert(intersection.dist);
 	mIntersections.push_back(intersection);
-	mAngles.insert(mCell->pointCloud()->point(intersection.p1).angleIndex);
-	mAngles.insert(mCell->pointCloud()->point(intersection.p2).angleIndex);
+	mAngles.insert(intersection.sampler->pointCloud().group(intersection.p1).angleIndex);
+	mAngles.insert(intersection.sampler->pointCloud().group(intersection.p2).angleIndex);
 }
 
 bool HoughAccumulator::hasCircleCandidate() const 
@@ -35,9 +35,9 @@ bool HoughAccumulator::hasCircleCandidate() const
 	return mAngles.size() >= mCell->minArcLength() && mIntersections.size() > 4;
 }
 
-Circle* HoughAccumulator::getCircleCandidate() const 
+Circle HoughAccumulator::getCircleCandidate() const 
 {
-	Circle *circle = new Circle;
+	Circle circle;
 	std::vector<float> xs, ys;
 	for (const Intersection &intersection : mIntersections)
 	{
@@ -48,8 +48,8 @@ Circle* HoughAccumulator::getCircleCandidate() const
 	// center = median of positions 
 	std::nth_element(xs.begin(), xs.begin() + median, xs.end());
 	std::nth_element(ys.begin(), ys.begin() + median, ys.end());
-	circle->center = cv::Point2f(xs[median], ys[median]);
-	circle->radius = radius();
+	circle.center = cv::Point2f(xs[median], ys[median]);
+	circle.radius = radius();
 	// least squares 
 	/*int col = 0;
 	Eigen::Matrix2Xf points(2, mIntersections.size() * 2);

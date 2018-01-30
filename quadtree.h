@@ -6,18 +6,13 @@
 class Quadtree
 {
 public:
-	Quadtree(const PointCloud *pointCloud, size_t minNumPoints, size_t minNumAngles, float minSize);
+	Quadtree(const PointCloud &pointCloud, float minSize);
 	
 	~Quadtree();
 	
-	const PointCloud* pointCloud() const 
+	const PointCloud& pointCloud() const 
 	{
 		return mPointCloud;
-	}
-	
-	size_t minNumPoints() const 
-	{
-		return mMinNumPoints;
 	}
 	
 	const Quadtree* parent() const 
@@ -32,7 +27,7 @@ public:
 	
 	const Quadtree* findLeaf(size_t pointIndex) const 
 	{
-		return (*mRoot->mLeaves)[pointIndex];
+		return mRoot->mLeaves[pointIndex];
 	}
 	
 	bool isRoot() const 
@@ -45,14 +40,9 @@ public:
 		return mIsLeaf;
 	}
 	
-	const std::vector<size_t>& points(size_t angle) const 
+	const std::vector<size_t>& points(short angle) const 
 	{
 		return mPoints[angle];
-	}
-	
-	size_t randomPoint(size_t angle) const 
-	{
-		return mPoints[angle][rand() % mPoints[angle].size()];
 	}
 	
 	cv::Rect2f rect() const 
@@ -71,20 +61,18 @@ public:
 	}
 	
 private:
-	const PointCloud *mPointCloud;
-	const size_t mMinNumPoints;
-	const size_t mMinNumAngles;
+	const PointCloud &mPointCloud;
 	const float mMinSize;
 	Quadtree *mRoot;
 	Quadtree *mParent;
-	std::vector<Quadtree*> mChildren;
+	Quadtree *mChildren[4];
 	cv::Point2f mCenter;
 	float mSize;
 	bool mIsLeaf;
 	std::vector<std::vector<size_t> > mPoints;
 	size_t mNumPoints;
-	size_t mNumAngles;
-	std::vector<Quadtree*> *mLeaves;
+	short mNumAngles;
+	Quadtree **mLeaves;
 	
 	Quadtree(Quadtree *parent);
 	

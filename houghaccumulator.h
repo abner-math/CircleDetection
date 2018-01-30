@@ -13,6 +13,7 @@ struct Circle
 
 struct Intersection
 {
+	Sampler *sampler;
 	size_t p1;
 	size_t p2;
 	cv::Point2f position;
@@ -44,7 +45,7 @@ public:
 	
 	bool hasCircleCandidate() const;
 	
-	Circle* getCircleCandidate() const;
+	Circle getCircleCandidate() const;
 	
 private:
 	HoughCell *mCell;

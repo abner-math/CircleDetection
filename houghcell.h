@@ -6,17 +6,11 @@
 class HoughCell 
 {
 public: 
-	HoughCell(Sampler *sampler, size_t branchingFactor, float minCellSize,
-				float maxIntersectionRatio);
+	HoughCell(const cv::Rect &extension, short minArcLength, float minCellSize, short branchingFactor, float maxIntersectionRatio = 1.5f);
 	
-	HoughCell(HoughCell *parent, size_t indX, size_t indY);
+	HoughCell(HoughCell *parent, short indX, short indY);
 	
 	~HoughCell();
-	
-	const PointCloud* pointCloud() const 
-	{
-		return mPointCloud;
-	}
 	
 	HoughCell* parent() const 
 	{
@@ -30,22 +24,27 @@ public:
 	
 	float cellSize() const 
 	{
-		return mRect.width;
+		return mExtension.width;
 	}
 	
-	size_t indX() const 
+	short branchingFactor() const 
+	{
+		return mBranchingFactor;
+	}
+	
+	short indX() const 
 	{
 		return mIndX;
 	}
 	
-	size_t indY() const 
+	short indY() const 
 	{
 		return mIndY;
 	}
 	
-	const cv::Rect2f& rect() const 
+	const cv::Rect2f& extension() const 
 	{
-		return mRect;
+		return mExtension;
 	}
 	
 	bool isVisited() const 
@@ -53,50 +52,39 @@ public:
 		return mVisited;
 	}
 	
-	const size_t minArcLength() const 
+	const short minArcLength() const 
 	{
-		return mParent->mSampler->minArcLength();
-	}
-	
-	bool isTermined() const 
-	{
-		return !mSampler->canSample();
-	}
-	
-	Sampler* sampler()  
-	{
-		return mSampler;
+		return mMinArcLength;
 	}
 	
 	std::set<HoughAccumulator*> visit();
 	
 	void setVisited();
 	
-	HoughAccumulator* addIntersection();
+	HoughAccumulator* addIntersection(Sampler *sampler);
 	
 private:
-	const PointCloud *mPointCloud;
-	const size_t mBranchingFactor;
+	const short mMinArcLength;
 	const float mMinCellSize;
+	const short mBranchingFactor;
 	const float mMaxIntersectionRatio;
 	HoughCell *mParent;
-	std::vector<HoughCell*> mChildren;
-	Sampler *mSampler;
-	cv::Rect2f mRect;
-	size_t mIndX, mIndY;
+	HoughCell **mChildren;
+	cv::Rect2f mExtension;
+	short mIndX, mIndY;
 	bool mVisited;
 	std::vector<HoughAccumulator*> mAccumulators;
 		
 	// reference: https://tavianator.com/fast-branchless-raybounding-box-intersections/
 	bool pointIntersectsRect(const Point &p);
 	
-	bool intersectionBetweenPoints(const std::pair<size_t, size_t> &sample, Intersection &intersection);
+	bool intersectionBetweenPoints(Sampler *sampler, const std::pair<size_t, size_t> &sample, Intersection &intersection);
 
-	inline size_t getChildIndex(const cv::Point2f &point, size_t &indX, size_t &indY)
+	short getChildIndex(const cv::Point2f &point, short &indX, short &indY)
 	{
-		cv::Point2f normalized = (point - mRect.tl()) / mRect.width;
-		indX = static_cast<size_t>(normalized.x * mBranchingFactor);
-		indY = static_cast<size_t>(normalized.y * mBranchingFactor);
+		cv::Point2f normalized = (point - mExtension.tl()) / mExtension.width;
+		indX = static_cast<short>(normalized.x * mBranchingFactor);
+		indY = static_cast<short>(normalized.y * mBranchingFactor);
 		return indY * mBranchingFactor + indX;
 	}
 

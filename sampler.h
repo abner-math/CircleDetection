@@ -6,14 +6,12 @@
 
 #include "quadtree.h"
 
-#define HISTORY_SIZE 10
-
 class Sampler
 {
 public:
-	Sampler(const Quadtree *quadtree, float climbChance, size_t minArcLength);
+	Sampler(const PointCloud &pointCloud, float minQuadtreeSize, short minArcLength);
 	
-	Sampler(Sampler &sampler);
+	~Sampler();
 	
 	size_t numAvailablePoints() const 
 	{
@@ -22,20 +20,25 @@ public:
 	
 	size_t numPoints() const 
 	{
-		return mQuadtree->pointCloud()->numPoints();
+		return mPointCloud.numGroups();
 	}
 	
-	const Quadtree* quadtree() const 
+	short numAngles() const 
+	{
+		return mPointCloud.numAngles();
+	}
+	
+	const PointCloud& pointCloud() const 
+	{
+		return mPointCloud;
+	}
+	
+	const Quadtree& quadtree() const 
 	{
 		return mQuadtree;
 	}
 	
-	float climbChance() const 
-	{
-		return mClimbChance;
-	}
-	
-	size_t minArcLength() const 
+	short minArcLength() const 
 	{
 		return mMinArcLength;
 	}
@@ -44,60 +47,62 @@ public:
 	
 	std::pair<size_t, size_t> sample();
 	
-	bool isRemoved(size_t point) const
-	{
-		return mPoints[point] != point;
-	}
-	
 	void removePoint(size_t point);
 	
-	void removePointFromAll(size_t point);
+	bool isRemoved(size_t point) const
+	{
+		return mRemovedPoints[point];
+	}
+	
+	void blockPoint(size_t point);
+	
+	void unblockPoint(size_t point);
+	
+	bool isBlocked(size_t point) const 
+	{
+		return mBlockedPoints[point];
+	}
+	
+	bool isAvailable(size_t point) const 
+	{
+		return !isRemoved(point) && !isBlocked(point);
+	}
 	
 private:
-	const Quadtree *mQuadtree;
-	const float mClimbChance;
-	const size_t mMinArcLength;
-	Sampler *mRoot;
-	Sampler *mParent;
-	std::vector<size_t> mPoints;
-	std::vector<size_t> mNumPointsPerAngle;
+	const PointCloud &mPointCloud;
+	const short mMinArcLength;
+	Quadtree mQuadtree;
+	size_t *mPoints;
+	size_t *mNumPointsPerAngle;
+	bool *mRemovedPoints;
+	bool *mBlockedPoints;
 	size_t mNumEmptyAngles;
 	size_t mNumAvailablePoints;
-	size_t mLastPoints[HISTORY_SIZE];
-	size_t mLastPointIndex;
 	
-	inline size_t numAngles() const 
+	short angleIndex(size_t point) const 
 	{
-		return mQuadtree->pointCloud()->numAngles();
+		return mPointCloud.group(point).angleIndex;
 	}
 	
-	inline size_t normalAngleIndex(size_t point) const 
-	{
-		return 0;//mQuadtree->pointCloud()->point(point).normalAngleIndex;
-	}
+	size_t getPoint(size_t index);
 	
-	inline float getRandomNumber() const
-	{
-		return rand() / static_cast<float>(RAND_MAX);
-	}
-	
-	inline size_t decreaseOneAngle(size_t angle) const
+	short decreaseOneAngle(short angle) const
 	{
 		if (angle == 0) return numAngles() - 1;
 		return angle - 1;
 	}
 	
-	inline size_t increaseOneAngle(size_t angle) const 
+	short increaseOneAngle(short angle) const 
 	{
 		if (angle == numAngles() - 1) return 0;
 		return angle + 1;
 	}
 	
-	size_t getPoint(size_t index);
+	size_t getValidPoint(const std::vector<size_t> &points) const;
 	
-	size_t getValidPoint(const Quadtree *node, size_t angle);
+	size_t getValidPoint(const Quadtree *node, short angle) const;
 	
-	size_t selectRandomPoint(size_t point);
+	size_t getSubstitutePoint(size_t point);
 	
 	size_t selectRandomPoint();
 	
