@@ -7,6 +7,20 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 
+inline float norm(const cv::Point2f &p)
+{
+	return std::sqrt(p.x * p.x + p.y * p.y);
+}
+
+struct Point
+{
+	cv::Point2f position; 
+	cv::Point2f normal;
+	cv::Point2f inverseNormal;
+	int angleIndex;
+	float curvature;
+};
+
 class ImageUtils
 {
 public:
@@ -47,6 +61,11 @@ public:
 		return cv::Point2f(((float*)mInverseSobelX.data)[edgeIndex], ((float*)mInverseSobelY.data)[edgeIndex]);
 	}
 	
+	float sobelAngle(int edgeIndex) const 
+	{
+		return ((float*)mSobelAngle.data)[edgeIndex];
+	}
+	
 	float curvature(int edgeIndex);
 	
 	int createConnectedComponents();
@@ -56,12 +75,12 @@ public:
 		return mLabels[edgeIndex];
 	}
 	
-	int groupPointsByAngle();
-	
-	bool isCentroid(int edgeIndex)
+	const cv::Point2f& center(int label)
 	{
-		return mGroups[edgeIndex] == edgeIndex;
+		return mCenters[label];
 	}
+	
+	int groupPointsByAngle();
 	
 	short angleIndexOf(int edgeIndex)
 	{
@@ -83,8 +102,10 @@ private:
 	int *mReverseEdgeIndices;
 	float *mNeighborAngles;
 	int *mLabels;
+	std::vector<cv::Point2f> mCenters;
 	short *mAngleIndices;
 	int *mGroups;
+	std::vector<Point> mGroupPoints;
 
 	void createEdgeIndices();
 	
@@ -122,13 +143,7 @@ private:
 	
 	void calculateNeighborAngles();
 	
-	float sobelAngle(int index) const 
-	{
-		float angle = ((float*)mSobelAngle.data)[index];
-		if (angle >= 180)
-			return angle - 180;
-		return angle;
-	}
+	void reorientNormals();
 	
 	void calculateAngleIndices();
 	

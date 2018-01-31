@@ -1,4 +1,4 @@
-//#define _DEBUG_INTERACTIVE
+#define _DEBUG_INTERACTIVE
 
 #include <iostream>
 #include <map>
@@ -73,9 +73,9 @@ void drawRect(const cv::Rect2f &rect, cv::Scalar color = cv::Scalar(255, 255, 25
 	cv::rectangle(gFrame, r, color);
 }
 
-void drawCircle(const Circle &circle, cv::Scalar color = cv::Scalar(255, 255, 255))
+void drawCircle(const Circle &circle, cv::Scalar color = cv::Scalar(255, 255, 255), int thickness = 2)
 {
-	cv::circle(gFrame, cv::Point((int)circle.center.x, (int)circle.center.y), (int)circle.radius, color, 2); 
+	cv::circle(gFrame, cv::Point((int)circle.center.x, (int)circle.center.y), (int)circle.radius, color, thickness); 
 }
 
 void drawPoints(const PointCloud &pointCloud, cv::Scalar color = cv::Scalar(255, 255, 255))
@@ -84,6 +84,15 @@ void drawPoints(const PointCloud &pointCloud, cv::Scalar color = cv::Scalar(255,
 	{
 		drawPoint(pointCloud.point(i).position, color);
 	}
+}
+
+void drawNormals(const PointCloud &pointCloud, cv::Scalar color = cv::Scalar(255, 255, 255))
+{
+	for (size_t i = 0; i < pointCloud.numPoints(); i++)
+	{
+		drawLine(pointCloud.point(i).position, pointCloud.point(i).position + pointCloud.point(i).normal * 10, color);
+	}
+	drawPoint(pointCloud.center(), cv::Scalar(0, 255, 0));
 }
 
 void drawGroups(const PointCloud &pointCloud, cv::Scalar color = cv::Scalar(255, 255, 255))
@@ -285,15 +294,15 @@ void cannyCallback(int slider, void *userData)
 	}
 	HoughCell *cell = new HoughCell(extension, gMinArcLength, gMinCellSize, gCellBranchingFactor);
 	auto end = std::chrono::high_resolution_clock::now();
-	auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
-	std::cout << "Time elapsed: " << duration / 1e6 << "ms" << std::endl;
+	auto durationPreprocessing = std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+	std::cout << "Time elapsed: " << durationPreprocessing / 1e6 << "ms" << std::endl;
 	#ifdef _BENCHMARK
-		std::cout << "\tTime to process image: " << gTimeProcessImage / 1e6 << "ms (" << gTimeProcessImage / duration * 100 << "%)" << std::endl
-					<< "\tTime to create connected components: " << gTimeCreateConnectedComponents / 1e6 << "ms (" << gTimeCreateConnectedComponents / duration * 100 << "%)" << std::endl
-					<< "\tTime to group points: " << gTimeGroupPoints / 1e6 << "ms (" << gTimeGroupPoints / duration * 100 << "%)" << std::endl
-					<< "\tTime to create point cloud: " << gTimeCreatePointCloud / 1e6 << "ms (" << gTimeCreatePointCloud / duration * 100 << "%)" << std::endl
-					<< "\tTime to create sampler: " << gTimeCreateSampler / 1e6 << "ms (" << gTimeCreateSampler / duration * 100 << "%)" << std::endl
-					<< "\tExplained: " << (gTimeProcessImage + gTimeCreateConnectedComponents + gTimeGroupPoints + gTimeCreatePointCloud + gTimeCreateSampler) / duration * 100 << "%" << std::endl;
+		std::cout << "\tTime to process image: " << gTimeProcessImage / 1e6 << "ms (" << gTimeProcessImage / durationPreprocessing * 100 << "%)" << std::endl
+					<< "\tTime to create connected components: " << gTimeCreateConnectedComponents / 1e6 << "ms (" << gTimeCreateConnectedComponents / durationPreprocessing * 100 << "%)" << std::endl
+					<< "\tTime to group points: " << gTimeGroupPoints / 1e6 << "ms (" << gTimeGroupPoints / durationPreprocessing * 100 << "%)" << std::endl
+					<< "\tTime to create point cloud: " << gTimeCreatePointCloud / 1e6 << "ms (" << gTimeCreatePointCloud / durationPreprocessing * 100 << "%)" << std::endl
+					<< "\tTime to create sampler: " << gTimeCreateSampler / 1e6 << "ms (" << gTimeCreateSampler / durationPreprocessing * 100 << "%)" << std::endl
+					<< "\tExplained: " << (gTimeProcessImage + gTimeCreateConnectedComponents + gTimeGroupPoints + gTimeCreatePointCloud + gTimeCreateSampler) / durationPreprocessing * 100 << "%" << std::endl;
 	#endif 
 	// Draw points 
 	gFrame = cv::Mat::zeros(gray.size(), CV_8UC3);
@@ -304,6 +313,14 @@ void cannyCallback(int slider, void *userData)
 		}
 		cv::imshow(gEdgeWindowName, gFrame);
 		cv::waitKey(0);
+		gFrame = cv::Mat::zeros(gray.size(), CV_8UC3);
+		for (size_t i = 0; i < pointClouds.size(); i++)
+		{
+			drawNormals(pointClouds[i], cv::Scalar(0, 0, 255));
+		}
+		cv::imshow(gEdgeWindowName, gFrame);
+		cv::waitKey(0);
+		gFrame = cv::Mat::zeros(gray.size(), CV_8UC3);
 		std::vector<cv::Scalar> colors;
 		cv::Scalar color(rand() % 255, rand() % 255, rand() % 255);
 		for (size_t i = 0; i < pointClouds.size(); i++)
@@ -331,10 +348,8 @@ void cannyCallback(int slider, void *userData)
 		}
 	#endif 
 	#ifndef _DEBUG_INTERACTIVE
-		for (size_t i = 0; i < pointClouds.size(); i++)
-		{
-			drawPoints(pointClouds[i]);
-		}
+		gFrame = gray.clone();
+		cv::cvtColor(gFrame, gFrame, CV_GRAY2BGR);
 	#endif 	
 	// Find circles 
 	std::cout << "Detecting circles..." << std::endl;
@@ -346,27 +361,52 @@ void cannyCallback(int slider, void *userData)
 	#endif
 	houghTransform(cell, pointClouds, circles);
 	end = std::chrono::high_resolution_clock::now();
-	duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
-	std::cout << "Time elapsed: " << duration / 1e6 << "ms" << std::endl;
+	auto durationDetection = std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+	std::cout << "Time elapsed: " << durationDetection / 1e6 << "ms" << std::endl;
 	#ifdef _BENCHMARK
-		std::cout << "\tTime to sample: " << (gTimeSample1 + gTimeSample2) / 1e6 << "ms (" << (gTimeSample1 + gTimeSample2) / duration * 100 << "%)" << std::endl
-						<< "\t\tFirst point: " << gTimeSample1 / 1e6 << "ms (" << gTimeSample1 / duration * 100 << "%); Second point: " << gTimeSample2 / 1e6 << "ms (" << gTimeSample2 / duration * 100 << "%)" << std::endl
-					<< "\tTime to calculate intersection: " << gTimeIntersection / 1e6 << "ms (" << gTimeIntersection / duration * 100 << "%)" << std::endl
-					<< "\tTime to add intersection: " << gTimeAddIntersection / 1e6 << "ms (" << gTimeAddIntersection / duration * 100 << "%)" << std::endl
-					<< "\tTime to visit cell: " << gTimeVisit / 1e6 << "ms (" << gTimeVisit / duration * 100 << "%)" << std::endl
-					<< "\tTime to add circle: " << gTimeAddCircle / 1e6 << "ms (" << gTimeAddCircle / duration * 100 << "%)" << std::endl
-					<< "\tTime debug: " << gTimeDebug / 1e6 << "ms (" << gTimeDebug / duration * 100 << "%)" << std::endl
-					<< "\tExplained: " << (gTimeSample1 + gTimeSample2 + gTimeIntersection + gTimeAddIntersection + gTimeVisit + gTimeAddCircle) / duration * 100 << "%" << std::endl;
+		std::cout << "\tTime to sample: " << (gTimeSample1 + gTimeSample2) / 1e6 << "ms (" << (gTimeSample1 + gTimeSample2) / durationDetection * 100 << "%)" << std::endl
+						<< "\t\tFirst point: " << gTimeSample1 / 1e6 << "ms (" << gTimeSample1 / durationDetection * 100 << "%); Second point: " << gTimeSample2 / 1e6 << "ms (" << gTimeSample2 / durationDetection * 100 << "%)" << std::endl
+					<< "\tTime to calculate intersection: " << gTimeIntersection / 1e6 << "ms (" << gTimeIntersection / durationDetection * 100 << "%)" << std::endl
+					<< "\tTime to add intersection: " << gTimeAddIntersection / 1e6 << "ms (" << gTimeAddIntersection / durationDetection * 100 << "%)" << std::endl
+					<< "\tTime to visit cell: " << gTimeVisit / 1e6 << "ms (" << gTimeVisit / durationDetection * 100 << "%)" << std::endl
+					<< "\tTime to add circle: " << gTimeAddCircle / 1e6 << "ms (" << gTimeAddCircle / durationDetection * 100 << "%)" << std::endl
+					<< "\tTime debug: " << gTimeDebug / 1e6 << "ms (" << gTimeDebug / durationDetection * 100 << "%)" << std::endl
+					<< "\tExplained: " << (gTimeSample1 + gTimeSample2 + gTimeIntersection + gTimeAddIntersection + gTimeVisit + gTimeAddCircle) / durationDetection * 100 << "%" << std::endl;
 	#endif 
+	std::cout << "Num circles: " << circles.size() << std::endl;
+	std::cout << "Total time elapsed: " << (durationPreprocessing + durationDetection) / 1e6 << "ms" << std::endl;
 	// Draw circles 
 	for (const Circle &circle : circles)
 	{
-		drawCircle(circle, cv::Scalar(rand() % 255, rand() % 255, rand() % 255));
+		drawCircle(circle, cv::Scalar(0, 0, 0), 4);
+	}
+	for (const Circle &circle : circles)
+	{
+		drawCircle(circle, cv::Scalar(255, 255, 255), 2);
 	}
 	// Delete data
 	delete cell;
 	// Display image
 	cv::imshow(gEdgeWindowName, gFrame);
+	// OpenCV Hough Transform
+	begin = std::chrono::high_resolution_clock::now();
+	std::vector<cv::Vec3f> cvCircles;
+	//cv::HoughCircles(gImgGray, cvCircles, CV_HOUGH_GRADIENT, 1, 20, gCannyLowThreshold * 3, 40, 0, 0);
+	end = std::chrono::high_resolution_clock::now();
+	auto opencvDuration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+	std::cout << "OpenCV num circles: " << cvCircles.size() << std::endl;
+	std::cout << "OpenCV time elapsed: " << opencvDuration / 1e6 << "ms" << std::endl;
+	cv::Mat cvImg = gray.clone();
+	for (size_t i = 0; i < cvCircles.size(); i++)
+	{
+	   cv::Point center(cvRound(cvCircles[i][0]), cvRound(cvCircles[i][1]));
+	   int radius = cvRound(cvCircles[i][2]);
+	   // circle center
+	   cv::circle(cvImg, center, 3, cv::Scalar(0,255,0), -1, 8, 0);
+	   // circle outline
+	   cv::circle(cvImg, center, radius, cv::Scalar(0,0,255), 3, 8, 0);
+	 }
+	 cv::imshow(gEdgeWindowName + "_OpenCV", cvImg);
 }
 
 int main(int argc, char **argv)

@@ -135,10 +135,16 @@ int ImageUtils::createConnectedComponents()
 			marked[edgeSeed] = true;
 			mLabels[edgeSeed] = numLabels;
 			queue.push(mReverseEdgeIndices[edgeSeed]);
+			float xs = 0;
+			float ys = 0;
+			int count = 0;
 			while (!queue.empty())
 			{
 				int index = queue.front();
 				queue.pop();
+				xs += index % mImg.cols;
+				ys += index / mImg.cols;
+				++count;
 				for (int i = 0; i < 8; i++)
 				{
 					int neighbor = neighborIndex(index, i);
@@ -151,6 +157,7 @@ int ImageUtils::createConnectedComponents()
 					}
 				}
 			}
+			mCenters.push_back(cv::Point2f(xs / count, ys / count));
 			++numLabels;
 		}
 	}
@@ -163,12 +170,34 @@ void ImageUtils::calculateAngleIndices()
 	mAngleIndices = new short[mNumEdges];
 	for (int edgeIndex = 0; edgeIndex < mNumEdges; edgeIndex++)
 	{
-		mAngleIndices[edgeIndex] = (short)(std::round(sobelAngle(edgeIndex) / (180.0f / mNumAngles))) % mNumAngles;
+		mAngleIndices[edgeIndex] = (short)(std::round(sobelAngle(edgeIndex) / (360.0f / mNumAngles))) % mNumAngles;
 	}
 }
+
+void ImageUtils::reorientNormals()
+{
+	for (int edgeSeed = 0; edgeSeed < mNumEdges; edgeSeed++)
+	{
+		int label = mLabels[edgeSeed];
+		int index = mReverseEdgeIndices[edgeSeed];
+		cv::Point2f position(index % mImg.cols, index / mImg.cols);
+		if (sobel(edgeSeed).dot(position - mCenters[label]) < 0)
+		{
+			((float*)mSobelX.data)[edgeSeed] = -((float*)mSobelX.data)[edgeSeed];
+			((float*)mSobelY.data)[edgeSeed] = -((float*)mSobelY.data)[edgeSeed];
+			((float*)mInverseSobelX.data)[edgeSeed] = -((float*)mInverseSobelX.data)[edgeSeed];
+			((float*)mInverseSobelY.data)[edgeSeed] = -((float*)mInverseSobelY.data)[edgeSeed];
+			((float*)mSobelAngle.data)[edgeSeed] = ((float*)mSobelAngle.data)[edgeSeed] + 180;
+			if (((float*)mSobelAngle.data)[edgeSeed] > 360)
+				((float*)mSobelAngle.data)[edgeSeed] = ((float*)mSobelAngle.data)[edgeSeed] - 360;
+		}
+	}
 	
+}
+
 int ImageUtils::groupPointsByAngle()
 {
+	reorientNormals();
 	calculateAngleIndices();
 	std::queue<int> queue;
 	bool *marked = (bool*)calloc(mNumEdges, sizeof(bool));
@@ -181,15 +210,29 @@ int ImageUtils::groupPointsByAngle()
 			marked[edgeSeed] = true;
 			mGroups[edgeSeed] = edgeSeed;
 			queue.push(mReverseEdgeIndices[edgeSeed]);
+			float xs = 0;
+			float ys = 0;
+			float nxs = 0;
+			float nys = 0;
+			float curvatures = 0;
+			int count = 0;
 			while (!queue.empty())
 			{
 				int index = queue.front();
 				queue.pop();
+				xs += index % mImg.cols;
+				ys += index / mImg.cols;
+				nxs += ((float*)mSobelX.data)[mEdgeIndices[index]];
+				nys += ((float*)mSobelY.data)[mEdgeIndices[index]];
+				curvatures += curvature(mEdgeIndices[index]);
+				++count;
 				for (int i = 0; i < 8; i++)
 				{
 					int neighbor = neighborIndex(index, i);
 					int edgeNeighbor = mEdgeIndices[neighbor];
-					if (isEdge(neighbor) && !marked[edgeNeighbor] && mLabels[edgeSeed] == mLabels[edgeNeighbor] && mAngleIndices[edgeSeed] == mAngleIndices[edgeNeighbor])
+					if (isEdge(neighbor) && !marked[edgeNeighbor] && mLabels[edgeSeed] == mLabels[edgeNeighbor] && 
+						(mAngleIndices[edgeSeed] == mAngleIndices[edgeNeighbor] || 
+						mAngleIndices[edgeSeed] == (mAngleIndices[edgeNeighbor] + mNumAngles / 2) % mNumAngles))
 					{
 						marked[edgeNeighbor] = true;
 						mGroups[edgeNeighbor] = edgeSeed;
@@ -197,6 +240,15 @@ int ImageUtils::groupPointsByAngle()
 					}
 				}
 			}
+			Point groupPoint;
+			groupPoint.position = cv::Point2f(xs / count, ys / count);
+			cv::Point2f groupNormal(nxs / count, nys / count);
+			groupNormal /= norm(groupNormal);
+			groupPoint.normal = groupNormal;
+			groupPoint.inverseNormal = cv::Point2f(1 / groupNormal.x, 1 / groupNormal.y);
+			groupPoint.angleIndex = mAngleIndices[edgeSeed];
+			groupPoint.curvature = curvatures / count;
+			mGroupPoints.push_back(groupPoint);
 			++numGroups;
 		}
 	}

@@ -4,21 +4,6 @@
 #include "imageutils.h"
 #include "benchmark.hpp"
  
-struct Point
-{
-	cv::Point2f position; 
-	cv::Point2f normal;
-	cv::Point2f inverseNormal;
-	int angleIndex;
-	float curvature;
-	bool isCentroid;
-};
-
-inline float norm(const cv::Point2f &p)
-{
-	return std::sqrt(p.x * p.x + p.y * p.y);
-}
-
 class Sampler;
 
 class PointCloud
@@ -41,6 +26,16 @@ public:
 	size_t numGroups() const 
 	{
 		return mGroups.size();
+	}
+	
+	const cv::Point2f& center() const 
+	{
+		return mCenter;
+	}
+	
+	void setCenter(const cv::Point2f &center)
+	{
+		mCenter = center;
 	}
 	
 	void addPoint(const Point &point);
@@ -72,6 +67,7 @@ private:
 	std::vector<Point> mGroups;
 	short mNumAngles;
 	cv::Rect2f mExtension;
+	cv::Point2f mCenter;
 	Sampler *mSampler;
 				
 	PointCloud(int numAngles);

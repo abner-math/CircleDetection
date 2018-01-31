@@ -51,7 +51,7 @@ Sampler::~Sampler()
 
 bool Sampler::canSample() const 
 {
-	return (numAngles() - mNumEmptyAngles) > mMinArcLength;
+	return mNumAvailablePoints > 2 * mMinArcLength && (numAngles() - mNumEmptyAngles) > mMinArcLength;
 }
 
 std::pair<size_t, size_t> Sampler::sample()  
@@ -77,7 +77,7 @@ std::pair<size_t, size_t> Sampler::sample()
 void Sampler::removePoint(size_t point)
 {
 	if (isRemoved(point)) return;
-	mPoints[point] = selectRandomPoint();
+	mPoints[point] = getPoint(rand() % numPoints());
 	if (--mNumPointsPerAngle[angleIndex(point)] == 0)
 		++mNumEmptyAngles;
 	--mNumAvailablePoints;
@@ -124,7 +124,7 @@ size_t Sampler::selectRandomPoint()
 
 size_t Sampler::selectAnotherRandomPoint(size_t point)
 {
-	short angle = (short)(getRandomValueFromExponentialDist() * (numAngles() / 2) + angleIndex(point) + numAngles() / 2) % numAngles();
+	short angle = (short)(getRandomValueFromExponentialDist() * (numAngles() / 2) + angleIndex(point) + numAngles() / 4) % numAngles();
 	size_t anotherPoint = selectRandomPointWithValidAngle(angle);
 	if (anotherPoint < numPoints()) return anotherPoint;
 	return selectRandomPoint();

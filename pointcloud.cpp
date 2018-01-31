@@ -29,6 +29,10 @@ cv::Rect2f PointCloud::createPointCloudsFromImage(const cv::Mat &img, int cannyL
 		begin = std::chrono::high_resolution_clock::now();
 	#endif
 	pointClouds = std::vector<PointCloud>(numConnectedComponents, PointCloud(numAngles));
+	for (int i = 0; i < numConnectedComponents; i++)
+	{
+		pointClouds[i].setCenter(imgUtils.center(i));
+	}
 	for (int edgeIndex = 0; edgeIndex < imgUtils.numEdges(); edgeIndex++)
 	{
 		Point point;
