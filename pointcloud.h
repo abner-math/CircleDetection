@@ -4,6 +4,15 @@
 #include "imageutils.h"
 #include "benchmark.hpp"
  
+struct Point
+{
+	cv::Point2f position; 
+	cv::Point2f normal;
+	int angleIndex;
+	float curvature;
+	int count;
+};
+
 class Sampler;
 
 class PointCloud
@@ -33,13 +42,6 @@ public:
 		return mCenter;
 	}
 	
-	void setCenter(const cv::Point2f &center)
-	{
-		mCenter = center;
-	}
-	
-	void addPoint(const Point &point);
-	
 	const Point& point(size_t index) const 
 	{
 		return mPoints[index];
@@ -55,14 +57,20 @@ public:
 		return mExtension;
 	}
 	
-	void createSampler(short minArcLength, float minQuadtreeSize = 20.0f);
+	void createSampler(short minArcLength);
 	
 	Sampler* sampler() const 
 	{
 		return mSampler;
 	}
 	
+	static const cv::Mat& edgeImg()  
+	{
+		return sEdgeImg;
+	}
+	
 private:
+	static cv::Mat sEdgeImg;
 	std::vector<Point> mPoints;
 	std::vector<Point> mGroups;
 	short mNumAngles;

@@ -12,7 +12,7 @@
 class Sampler
 {
 public:
-	Sampler(const PointCloud &pointCloud, float minQuadtreeSize, short minArcLength);
+	Sampler(const PointCloud &pointCloud, short minArcLength);
 	
 	~Sampler();
 	
@@ -62,6 +62,7 @@ private:
 	size_t **mPointsPerAngle;
 	size_t *mTotalNumPointsPerAngle;
 	size_t *mNumPointsPerAngle;
+	size_t *mNumPicksPerPoint;
 	size_t mNumEmptyAngles;
 	size_t mNumAvailablePoints;
 	

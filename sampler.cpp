@@ -6,7 +6,7 @@ boost::mt19937 Sampler::sRNG;
 boost::exponential_distribution<float> Sampler::sDistribution = boost::exponential_distribution<float>(3.5f);
 boost::variate_generator<boost::mt19937, boost::exponential_distribution<float> > Sampler::sGenerator = boost::variate_generator<boost::mt19937, boost::exponential_distribution<float> >(sRNG, sDistribution);
 	
-Sampler::Sampler(const PointCloud &pointCloud, float minQuadtreeSize, short minArcLength)
+Sampler::Sampler(const PointCloud &pointCloud, short minArcLength)
 	: mPointCloud(pointCloud)
 	, mMinArcLength(minArcLength)
 	, mNumEmptyAngles(numAngles())
@@ -15,9 +15,11 @@ Sampler::Sampler(const PointCloud &pointCloud, float minQuadtreeSize, short minA
 	mPoints = new size_t[numPoints()];
 	mNumPointsPerAngle = (size_t*)calloc(numAngles(), sizeof(size_t));
 	mTotalNumPointsPerAngle = (size_t*)calloc(numAngles(), sizeof(size_t));
+	mNumPicksPerPoint = new size_t[numPoints()];
 	for (size_t i = 0; i < numPoints(); i++)
 	{
 		mPoints[i] = i;
+		mNumPicksPerPoint[i] = 0;
 		++mTotalNumPointsPerAngle[angleIndex(i)];
 		if (++mNumPointsPerAngle[angleIndex(i)] == 1)
 			--mNumEmptyAngles;
@@ -42,6 +44,7 @@ Sampler::~Sampler()
 	delete[] mPoints;
 	delete[] mNumPointsPerAngle;
 	delete[] mTotalNumPointsPerAngle;
+	delete[] mNumPicksPerPoint;
 	for (short i = 0; i < numAngles(); i++)
 	{
 		delete[] mPointsPerAngle[i];
@@ -51,7 +54,7 @@ Sampler::~Sampler()
 
 bool Sampler::canSample() const 
 {
-	return mNumAvailablePoints > 2 * mMinArcLength && (numAngles() - mNumEmptyAngles) > mMinArcLength;
+	return mPointCloud.numGroups() > mMinArcLength && mNumAvailablePoints > 2 * mMinArcLength && (numAngles() - mNumEmptyAngles) > mMinArcLength;
 }
 
 std::pair<size_t, size_t> Sampler::sample()  
@@ -61,12 +64,20 @@ std::pair<size_t, size_t> Sampler::sample()
 		auto begin = std::chrono::high_resolution_clock::now();
 	#endif 
 	p.first = selectRandomPoint();
+	if (++mNumPicksPerPoint[p.first] > 10)
+	{
+		removePoint(p.first);
+	}
 	#ifdef _BENCHMARK
 		auto end = std::chrono::high_resolution_clock::now();
 		gTimeSample1 += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
 		begin = std::chrono::high_resolution_clock::now();
 	#endif 
 	p.second = selectAnotherRandomPoint(p.first);
+	if (++mNumPicksPerPoint[p.second] > 10)
+	{
+		removePoint(p.second);
+	}
 	#ifdef _BENCHMARK
 		end = std::chrono::high_resolution_clock::now();
 		gTimeSample2 += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();

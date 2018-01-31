@@ -13,7 +13,7 @@ ImageUtils::ImageUtils(const cv::Mat &img, short numAngles, int cannyLowThreshol
 	cv::GaussianBlur(img, mImg, cv::Size(5, 5), 0, 0);
 	cv::Canny(mImg, mEdges, cannyLowThreshold, cannyLowThreshold * cannyRatio, cannyKernelSize);
 	createEdgeIndices();
-	createSobel();
+	createNormals();
 }
 
 ImageUtils::~ImageUtils()
@@ -55,7 +55,7 @@ void ImageUtils::createEdgeIndices()
 	}
 }
 
-void ImageUtils::createSobel()
+void ImageUtils::createNormals()
 {
 	cv::Mat sobelX, sobelY;
 	cv::Sobel(mImg, sobelX, CV_32F, 1, 0, 3, 1, 0, cv::BORDER_DEFAULT);
@@ -70,8 +70,6 @@ void ImageUtils::createSobel()
 	cv::magnitude(mSobelX, mSobelY, mSobelNorm);
 	cv::divide(mSobelX, mSobelNorm, mSobelX);
 	cv::divide(mSobelY, mSobelNorm, mSobelY);
-	mInverseSobelX = 1 / mSobelX;
-	mInverseSobelY = 1 / mSobelY;
 	cv::phase(mSobelX, mSobelY, mSobelAngle, true);
 }
 
@@ -124,6 +122,7 @@ void ImageUtils::calculateNeighborAngles()
 int ImageUtils::createConnectedComponents()
 {
 	calculateNeighborAngles();
+	calculateAngleIndices();
 	std::queue<int> queue;
 	bool *marked = (bool*)calloc(mNumEdges, sizeof(bool));
 	mLabels = new int[mNumEdges];
@@ -162,6 +161,7 @@ int ImageUtils::createConnectedComponents()
 		}
 	}
 	delete[] marked;
+	reorientNormals();
 	return numLabels;
 }
 
@@ -170,7 +170,7 @@ void ImageUtils::calculateAngleIndices()
 	mAngleIndices = new short[mNumEdges];
 	for (int edgeIndex = 0; edgeIndex < mNumEdges; edgeIndex++)
 	{
-		mAngleIndices[edgeIndex] = (short)(std::round(sobelAngle(edgeIndex) / (360.0f / mNumAngles))) % mNumAngles;
+		mAngleIndices[edgeIndex] = (short)(std::round(normalAngle(edgeIndex) / (360.0f / mNumAngles))) % mNumAngles;
 	}
 }
 
@@ -181,12 +181,10 @@ void ImageUtils::reorientNormals()
 		int label = mLabels[edgeSeed];
 		int index = mReverseEdgeIndices[edgeSeed];
 		cv::Point2f position(index % mImg.cols, index / mImg.cols);
-		if (sobel(edgeSeed).dot(position - mCenters[label]) < 0)
+		if (normal(edgeSeed).dot(position - mCenters[label]) < 0)
 		{
 			((float*)mSobelX.data)[edgeSeed] = -((float*)mSobelX.data)[edgeSeed];
 			((float*)mSobelY.data)[edgeSeed] = -((float*)mSobelY.data)[edgeSeed];
-			((float*)mInverseSobelX.data)[edgeSeed] = -((float*)mInverseSobelX.data)[edgeSeed];
-			((float*)mInverseSobelY.data)[edgeSeed] = -((float*)mInverseSobelY.data)[edgeSeed];
 			((float*)mSobelAngle.data)[edgeSeed] = ((float*)mSobelAngle.data)[edgeSeed] + 180;
 			if (((float*)mSobelAngle.data)[edgeSeed] > 360)
 				((float*)mSobelAngle.data)[edgeSeed] = ((float*)mSobelAngle.data)[edgeSeed] - 360;
@@ -197,12 +195,10 @@ void ImageUtils::reorientNormals()
 
 int ImageUtils::groupPointsByAngle()
 {
-	reorientNormals();
-	calculateAngleIndices();
-	std::queue<int> queue;
-	bool *marked = (bool*)calloc(mNumEdges, sizeof(bool));
 	mGroups = new int[mNumEdges];
+	bool *marked = (bool*)calloc(mNumEdges, sizeof(bool));
 	int numGroups = 0;
+	std::queue<int> queue;
 	for (int edgeSeed = 0; edgeSeed < mNumEdges; edgeSeed++)
 	{
 		if (!marked[edgeSeed])
@@ -210,22 +206,10 @@ int ImageUtils::groupPointsByAngle()
 			marked[edgeSeed] = true;
 			mGroups[edgeSeed] = edgeSeed;
 			queue.push(mReverseEdgeIndices[edgeSeed]);
-			float xs = 0;
-			float ys = 0;
-			float nxs = 0;
-			float nys = 0;
-			float curvatures = 0;
-			int count = 0;
 			while (!queue.empty())
 			{
 				int index = queue.front();
 				queue.pop();
-				xs += index % mImg.cols;
-				ys += index / mImg.cols;
-				nxs += ((float*)mSobelX.data)[mEdgeIndices[index]];
-				nys += ((float*)mSobelY.data)[mEdgeIndices[index]];
-				curvatures += curvature(mEdgeIndices[index]);
-				++count;
 				for (int i = 0; i < 8; i++)
 				{
 					int neighbor = neighborIndex(index, i);
@@ -240,15 +224,6 @@ int ImageUtils::groupPointsByAngle()
 					}
 				}
 			}
-			Point groupPoint;
-			groupPoint.position = cv::Point2f(xs / count, ys / count);
-			cv::Point2f groupNormal(nxs / count, nys / count);
-			groupNormal /= norm(groupNormal);
-			groupPoint.normal = groupNormal;
-			groupPoint.inverseNormal = cv::Point2f(1 / groupNormal.x, 1 / groupNormal.y);
-			groupPoint.angleIndex = mAngleIndices[edgeSeed];
-			groupPoint.curvature = curvatures / count;
-			mGroupPoints.push_back(groupPoint);
 			++numGroups;
 		}
 	}

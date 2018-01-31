@@ -6,7 +6,7 @@
 class HoughCell 
 {
 public: 
-	HoughCell(const cv::Rect &extension, short minArcLength, float minCellSize, short branchingFactor, float maxIntersectionRatio = 1.5f);
+	HoughCell(const cv::Rect &extension, short minArcLength, short branchingFactor, float maxIntersectionRatio = 1.5f);
 	
 	HoughCell(HoughCell *parent, short indX, short indY);
 	
@@ -15,11 +15,6 @@ public:
 	HoughCell* parent() const 
 	{
 		return mParent;
-	}
-	
-	float minCellSize() const 
-	{
-		return mMinCellSize;
 	}
 	
 	float cellSize() const 
@@ -65,7 +60,6 @@ public:
 	
 private:
 	const short mMinArcLength;
-	const float mMinCellSize;
 	const short mBranchingFactor;
 	const float mMaxIntersectionRatio;
 	HoughCell *mParent;
@@ -75,9 +69,6 @@ private:
 	bool mVisited;
 	std::vector<HoughAccumulator*> mAccumulators;
 		
-	// reference: https://tavianator.com/fast-branchless-raybounding-box-intersections/
-	bool pointIntersectsRect(const Point &p);
-	
 	bool intersectionBetweenPoints(Sampler *sampler, const std::pair<size_t, size_t> &sample, Intersection &intersection);
 
 	short getChildIndex(const cv::Point2f &point, short &indX, short &indY)

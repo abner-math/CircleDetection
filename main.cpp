@@ -1,4 +1,4 @@
-#define _DEBUG_INTERACTIVE
+//#define _DEBUG_INTERACTIVE
 
 #include <iostream>
 #include <map>
@@ -10,14 +10,10 @@
 #include <memory>
 #include <time.h>
 
-#include <Eigen/Dense>
-#include <eigen3/unsupported/Eigen/NonLinearOptimization>
-
 #include "houghcell.h" 
 
 std::string gEdgeWindowName = "Edge image";
 int gCannyLowThreshold;
-int gMinCellSize;
 int gCellBranchingFactor;
 int gNumAngles;
 int gMinArcLength;
@@ -37,7 +33,7 @@ double gTimeIntersection;
 double gTimeAddIntersection;
 double gTimeVisit;
 double gTimeAddCircle;
-double gTimeDebug;
+double gTimeRemoveFalsePositive;
 #endif 
 
 #ifdef _DEBUG_INTERACTIVE
@@ -149,7 +145,7 @@ void displayInteractiveFrame(const std::vector<PointCloud> &pointClouds)
 bool isPointOnCircle(const HoughCell *cell, const Circle &circle, const cv::Point2f &point)
 {
 	float dist = norm(point - circle.center);
-	return std::abs(dist - circle.radius) < cell->minCellSize();
+	return std::abs(dist - circle.radius) < std::max(5.0f, circle.radius / 10);
 }
 
 bool circleIntersectsRect(const Circle &circle, const cv::Rect2f &rect)
@@ -195,20 +191,20 @@ void removeCirclePoints(const HoughCell *cell, const Circle &circle, const std::
 
 void houghTransform(HoughCell *cell, const std::vector<PointCloud> &pointClouds, std::vector<Circle> &circles);
 
-void subdivide(HoughAccumulator *accumulator, const std::vector<PointCloud> &pointClouds, std::vector<Circle> &circles)
+void subdivide(HoughAccumulator *accumulator, const std::vector<PointCloud> &pointClouds, std::vector<Circle> &circles, float radius)
 {
 	HoughCell *cell = accumulator->cell();
 	#ifdef _DEBUG_INTERACTIVE
 		gActiveCell = cell;
 		gRects.push_back(cell->extension());
 	#endif
-	if (cell->cellSize() > cell->minCellSize())
+	if (cell->cellSize() > radius)
 	{
 		for (HoughAccumulator *childAccumulator : cell->visit())
 		{
 			if (childAccumulator->hasCircleCandidate())
 			{
-				subdivide(childAccumulator, pointClouds, circles);
+				subdivide(childAccumulator, pointClouds, circles, childAccumulator->radius());
 			} 
 		}
 		houghTransform(cell, pointClouds, circles);
@@ -239,7 +235,7 @@ void houghTransform(HoughCell *cell, const std::vector<PointCloud> &pointClouds,
 	{
 		Sampler *sampler = pointCloud.sampler();
 		size_t numSamples = 0;
-		while (sampler->canSample() && numSamples < 2*sampler->numPoints())
+		while (sampler->canSample())
 		{
 			HoughAccumulator *accumulator = cell->addIntersection(sampler);
 			if (accumulator != NULL)
@@ -249,16 +245,38 @@ void houghTransform(HoughCell *cell, const std::vector<PointCloud> &pointClouds,
 					gIntersections.push_back(accumulator->intersections()[accumulator->intersections().size() - 1]);
 					displayInteractiveFrame(pointClouds);
 				#endif
+				float radius;
 				if (accumulator->hasCircleCandidate())
 				{
-					subdivide(accumulator, pointClouds, circles);
+					subdivide(accumulator, pointClouds, circles, accumulator->radius());
 				}
 			}
 			++numSamples;
 		}
 	}
 } 
- 
+
+void removeFalsePositiveCircles(std::vector<Circle> &circles)
+{
+	#ifdef _BENCHMARK
+		auto begin = std::chrono::high_resolution_clock::now();
+	#endif
+	for (int i = circles.size() - 1; i >= 0; i--)
+	{
+		cv::Rect2i boundingBox((int)(circles[i].center.x - circles[i].radius), (int)(circles[i].center.y - circles[i].radius), (int)(circles[i].radius * 2), (int)(circles[i].radius * 2));
+		cv::Mat edgeImg = PointCloud::edgeImg()(boundingBox);
+		cv::Mat referenceImg = cv::Mat::zeros(cv::Size(boundingBox.width, boundingBox.height), CV_8U);
+		cv::circle(referenceImg, cv::Point(boundingBox.width / 2, boundingBox.height / 2), (int)circles[i].radius, cv::Scalar(255, 255, 255), 2); 
+		cv::Mat resultImg = referenceImg & edgeImg;
+		float value = cv::sum(resultImg)[0] / 255.0f / (2 * M_PI * circles[i].radius);
+		circles[i].removed = value < 0.25f;
+	}
+	#ifdef _BENCHMARK
+		auto end = std::chrono::high_resolution_clock::now();
+		gTimeRemoveFalsePositive += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+	#endif 
+}
+
 void cannyCallback(int slider, void *userData)
 {
 	#ifdef _BENCHMARK
@@ -273,7 +291,7 @@ void cannyCallback(int slider, void *userData)
 		gTimeAddIntersection = 0;
 		gTimeVisit = 0;
 		gTimeAddCircle = 0;
-		gTimeDebug = 0;
+		gTimeRemoveFalsePositive = 0;
 	#endif 
 	#ifdef _DEBUG_INTERACTIVE	
 		gRects.clear();
@@ -290,9 +308,9 @@ void cannyCallback(int slider, void *userData)
 	std::cout << "Extension: " << extension << std::endl;
 	for (PointCloud &pointCloud : pointClouds)
 	{
-		pointCloud.createSampler(gMinArcLength, gMinCellSize);
+		pointCloud.createSampler(gMinArcLength);
 	}
-	HoughCell *cell = new HoughCell(extension, gMinArcLength, gMinCellSize, gCellBranchingFactor);
+	HoughCell *cell = new HoughCell(extension, gMinArcLength, gCellBranchingFactor);
 	auto end = std::chrono::high_resolution_clock::now();
 	auto durationPreprocessing = std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
 	std::cout << "Time elapsed: " << durationPreprocessing / 1e6 << "ms" << std::endl;
@@ -360,6 +378,7 @@ void cannyCallback(int slider, void *userData)
 		gRects.push_back(cell->extension());
 	#endif
 	houghTransform(cell, pointClouds, circles);
+	removeFalsePositiveCircles(circles);
 	end = std::chrono::high_resolution_clock::now();
 	auto durationDetection = std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
 	std::cout << "Time elapsed: " << durationDetection / 1e6 << "ms" << std::endl;
@@ -370,24 +389,46 @@ void cannyCallback(int slider, void *userData)
 					<< "\tTime to add intersection: " << gTimeAddIntersection / 1e6 << "ms (" << gTimeAddIntersection / durationDetection * 100 << "%)" << std::endl
 					<< "\tTime to visit cell: " << gTimeVisit / 1e6 << "ms (" << gTimeVisit / durationDetection * 100 << "%)" << std::endl
 					<< "\tTime to add circle: " << gTimeAddCircle / 1e6 << "ms (" << gTimeAddCircle / durationDetection * 100 << "%)" << std::endl
-					<< "\tTime debug: " << gTimeDebug / 1e6 << "ms (" << gTimeDebug / durationDetection * 100 << "%)" << std::endl
-					<< "\tExplained: " << (gTimeSample1 + gTimeSample2 + gTimeIntersection + gTimeAddIntersection + gTimeVisit + gTimeAddCircle) / durationDetection * 100 << "%" << std::endl;
+					<< "\tTime to remove false positives: " << gTimeRemoveFalsePositive / 1e6 << "ms (" << gTimeRemoveFalsePositive / durationDetection * 100 << "%)" << std::endl
+					<< "\tExplained: " << (gTimeSample1 + gTimeSample2 + gTimeIntersection + gTimeAddIntersection + gTimeVisit + gTimeAddCircle + gTimeRemoveFalsePositive) / durationDetection * 100 << "%" << std::endl;
 	#endif 
 	std::cout << "Num circles: " << circles.size() << std::endl;
 	std::cout << "Total time elapsed: " << (durationPreprocessing + durationDetection) / 1e6 << "ms" << std::endl;
 	// Draw circles 
 	for (const Circle &circle : circles)
 	{
-		drawCircle(circle, cv::Scalar(0, 0, 0), 4);
+		if (!circle.removed)
+		{
+			drawCircle(circle, cv::Scalar(0, 0, 0), 4);
+		}
 	}
+	cv::Mat img = gFrame.clone();
 	for (const Circle &circle : circles)
 	{
-		drawCircle(circle, cv::Scalar(255, 255, 255), 2);
+		if (circle.removed)
+		{
+			drawCircle(circle, cv::Scalar(0, 0, 255), 2);
+		}
+		else
+		{
+			drawCircle(circle, cv::Scalar(255, 255, 255), 2);
+		}
 	}
-	// Delete data
-	delete cell;
 	// Display image
 	cv::imshow(gEdgeWindowName, gFrame);
+	cv::waitKey(0);
+	// Display image without false circles 
+	gFrame = img;
+	for (const Circle &circle : circles)
+	{
+		if (!circle.removed)
+		{
+			drawCircle(circle, cv::Scalar(255, 255, 255), 2);
+		}
+	}
+	cv::imshow(gEdgeWindowName, gFrame);
+	// Delete data
+	delete cell;
 	// OpenCV Hough Transform
 	begin = std::chrono::high_resolution_clock::now();
 	std::vector<cv::Vec3f> cvCircles;
@@ -406,7 +447,7 @@ void cannyCallback(int slider, void *userData)
 	   // circle outline
 	   cv::circle(cvImg, center, radius, cv::Scalar(0,0,255), 3, 8, 0);
 	 }
-	 cv::imshow(gEdgeWindowName + "_OpenCV", cvImg);
+	// cv::imshow(gEdgeWindowName + "_OpenCV", cvImg);
 }
 
 int main(int argc, char **argv)
@@ -415,17 +456,17 @@ int main(int argc, char **argv)
 
 	if (argc < 5)
 	{
-		std::cerr << "Usage: ARHT <INPUT_IMAGE> <CANNY_MIN_THRESHOLD> <MIN_CELL_SIZE> <CELL_BRANCHING_FACTOR> <NUM_ANGLES> <MIN_ARC_LENGTH>" << std::endl;
+		std::cerr << "Usage: ARHT <INPUT_IMAGE> <CANNY_MIN_THRESHOLD> <CELL_BRANCHING_FACTOR> <NUM_ANGLES> <MIN_ARC_LENGTH>" << std::endl;
 		return -1;
 	}
 	std::string inputFilename(argv[1]);
 	gImg = cv::imread(inputFilename);
 	cv::cvtColor(gImg, gImgGray, CV_BGR2GRAY);
 	gCannyLowThreshold = atoi(argv[2]);
-	gMinCellSize = atoi(argv[3]);
-	gCellBranchingFactor = atoi(argv[4]);
-	gNumAngles = atoi(argv[5]);
-	gMinArcLength = atoi(argv[6]);
+	gCellBranchingFactor = atoi(argv[3]);
+	gNumAngles = atoi(argv[4]);
+	gMinArcLength = atoi(argv[5]);
+	
 	if (!gImg.data)
 	{
 		std::cerr << "ERROR: Could not read image." << std::endl;
@@ -434,7 +475,7 @@ int main(int argc, char **argv)
 	cv::namedWindow(gEdgeWindowName, CV_WINDOW_AUTOSIZE);
 	cv::createTrackbar("Min threshold:", gEdgeWindowName, &gCannyLowThreshold, 100, cannyCallback);
 	cannyCallback(gCannyLowThreshold, NULL);
-	cv::imshow("Original image", gImg);
+	//cv::imshow("Original image", gImg);
 	cv::waitKey(0);
 
 	return 0;

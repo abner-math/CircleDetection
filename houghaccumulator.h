@@ -4,11 +4,13 @@
 #include <set>
 
 #include "sampler.h"
+#include "circlefunctor.h"
 
 struct Circle
 {
 	cv::Point2f center;
 	float radius;
+	bool removed;
 };
 
 struct Intersection
@@ -18,6 +20,11 @@ struct Intersection
 	size_t p2;
 	cv::Point2f position;
 	float dist;
+	
+	bool operator<(const Intersection &other) const 
+	{
+		return dist < other.dist;
+	}
 };
 
 class HoughCell;
@@ -36,7 +43,7 @@ public:
 	
 	float radius() const;
 	
-	const std::vector<Intersection>& intersections() const 
+	const std::set<Intersection>& intersections() const 
 	{
 		return mIntersections;
 	}
@@ -50,8 +57,7 @@ public:
 private:
 	HoughCell *mCell;
 	std::set<size_t> mAngles;
-	std::set<float> mRadius;
-	std::vector<Intersection> mIntersections;
+	std::set<Intersection> mIntersections;
 	
 };
 

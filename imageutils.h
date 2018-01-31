@@ -12,21 +12,17 @@ inline float norm(const cv::Point2f &p)
 	return std::sqrt(p.x * p.x + p.y * p.y);
 }
 
-struct Point
-{
-	cv::Point2f position; 
-	cv::Point2f normal;
-	cv::Point2f inverseNormal;
-	int angleIndex;
-	float curvature;
-};
-
 class ImageUtils
 {
 public:
 	ImageUtils(const cv::Mat &img, short numAngles, int cannyLowThreshold, int cannyRatio = 3, int cannyKernelSize = 3);
 	
 	~ImageUtils();
+	
+	const cv::Mat& edgeImg() const 
+	{
+		return mEdges;
+	}
 	
 	bool isEdge(int index) const 
 	{
@@ -36,6 +32,11 @@ public:
 	int indexOf(int index) const 
 	{
 		return mEdgeIndices[index];
+	}
+	
+	int reverseIndexOf(int edgeIndex) const 
+	{
+		return mReverseEdgeIndices[edgeIndex];
 	}
 	
 	int numEdges() const 
@@ -51,17 +52,12 @@ public:
 		return cv::Point2f(x, y);
 	}
 	
-	cv::Point2f sobel(int edgeIndex) const 
+	cv::Point2f normal(int edgeIndex) const 
 	{
 		return cv::Point2f(((float*)mSobelX.data)[edgeIndex], ((float*)mSobelY.data)[edgeIndex]);
 	}
 	
-	cv::Point2f inverseSobel(int edgeIndex) const 
-	{
-		return cv::Point2f(((float*)mInverseSobelX.data)[edgeIndex], ((float*)mInverseSobelY.data)[edgeIndex]);
-	}
-	
-	float sobelAngle(int edgeIndex) const 
+	float normalAngle(int edgeIndex) const 
 	{
 		return ((float*)mSobelAngle.data)[edgeIndex];
 	}
@@ -87,13 +83,16 @@ public:
 		return mAngleIndices[edgeIndex];
 	}
 	
+	int groupOf(int edgeIndex)
+	{
+		return mGroups[edgeIndex];
+	}
+	
 private:
 	cv::Mat mImg;
 	cv::Mat mEdges;
 	cv::Mat mSobelX;
 	cv::Mat mSobelY;
-	cv::Mat mInverseSobelX;
-	cv::Mat mInverseSobelY;
 	cv::Mat mSobelNorm;
 	cv::Mat mSobelAngle;
 	int mNumAngles;
@@ -102,18 +101,17 @@ private:
 	int *mReverseEdgeIndices;
 	float *mNeighborAngles;
 	int *mLabels;
-	std::vector<cv::Point2f> mCenters;
 	short *mAngleIndices;
+	std::vector<cv::Point2f> mCenters;
 	int *mGroups;
-	std::vector<Point> mGroupPoints;
 
 	void createEdgeIndices();
 	
-	void createSobel();
+	void createNormals();
 	
 	float angleBetween(int a, int b) const 
 	{
-		return std::acos(std::abs(sobel(a).dot(sobel(b)))) * 180.0f / M_PI;
+		return std::acos(std::abs(normal(a).dot(normal(b)))) * 180.0f / M_PI;
 	}
 	
 	int neighborIndex(int index, int neighbor) const 

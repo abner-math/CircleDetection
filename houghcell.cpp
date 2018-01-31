@@ -3,9 +3,8 @@
 #include <iostream>
 
 HoughCell::HoughCell(const cv::Rect &extension, short minArcLength,
-		float minCellSize, short branchingFactor, float maxIntersectionRatio)
+		short branchingFactor, float maxIntersectionRatio)
 	: mMinArcLength(minArcLength)
-	, mMinCellSize(minCellSize)
 	, mBranchingFactor(branchingFactor)
 	, mMaxIntersectionRatio(maxIntersectionRatio)
 	, mParent(this)
@@ -19,7 +18,6 @@ HoughCell::HoughCell(const cv::Rect &extension, short minArcLength,
 
 HoughCell::HoughCell(HoughCell *parent, short indX, short indY)
 	: mMinArcLength(parent->mMinArcLength)
-	, mMinCellSize(parent->mMinCellSize)
 	, mBranchingFactor(parent->mBranchingFactor)
 	, mMaxIntersectionRatio(parent->mMaxIntersectionRatio)
 	, mParent(parent)
@@ -95,24 +93,6 @@ HoughAccumulator* HoughCell::addIntersection(Sampler *sampler)
 	return NULL;
 }
 
-
-bool HoughCell::pointIntersectsRect(const Point &p)
-{
-	float tx1 = (mExtension.tl().x - p.position.x) * p.inverseNormal.x;
-	float tx2 = (mExtension.br().x - p.position.x) * p.inverseNormal.x;
- 
-	float tmin = std::min(tx1, tx2);
-	float tmax = std::max(tx1, tx2);
- 
-	float ty1 = (mExtension.tl().y - p.position.y) * p.inverseNormal.y;
-	float ty2 = (mExtension.br().y - p.position.y) * p.inverseNormal.y;
- 
-	tmin = std::max(tmin, std::min(ty1, ty2));
-	tmax = std::min(tmax, std::max(ty1, ty2));
-	
-	return tmax >= tmin;
-}
-
 bool HoughCell::intersectionBetweenPoints(Sampler *sampler, const std::pair<size_t, size_t> &sample, Intersection &intersection)
 {
 	#ifdef _BENCHMARK
@@ -178,12 +158,10 @@ bool HoughCell::intersectionBetweenPoints(Sampler *sampler, const std::pair<size
 
 HoughAccumulator* HoughCell::accumulate(const Intersection &intersection)
 {
-	//intersection.sampler->removePoint(intersection.p1);
-	//intersection.sampler->removePoint(intersection.p2);
 	HoughAccumulator *chosenAccumulator = NULL;
 	for (HoughAccumulator *accumulator : mAccumulators)
 	{
-		if (std::abs(accumulator->radius() - intersection.dist) < mMinCellSize)
+		if (std::abs(accumulator->radius() - intersection.dist) < std::max(10.0f, accumulator->radius() / 10))
 		{
 			chosenAccumulator = accumulator;
 			break;
