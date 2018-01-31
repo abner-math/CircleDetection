@@ -145,7 +145,7 @@ void displayInteractiveFrame(const std::vector<PointCloud> &pointClouds)
 bool isPointOnCircle(const HoughCell *cell, const Circle &circle, const cv::Point2f &point)
 {
 	float dist = norm(point - circle.center);
-	return std::abs(dist - circle.radius) < std::max(5.0f, circle.radius / 10);
+	return std::abs(dist - circle.radius) < std::max(10.0f, circle.radius / 10);
 }
 
 bool circleIntersectsRect(const Circle &circle, const cv::Rect2f &rect)
@@ -256,11 +256,12 @@ void houghTransform(HoughCell *cell, const std::vector<PointCloud> &pointClouds,
 	}
 } 
 
-void removeFalsePositiveCircles(std::vector<Circle> &circles)
+int removeFalsePositiveCircles(std::vector<Circle> &circles)
 {
 	#ifdef _BENCHMARK
 		auto begin = std::chrono::high_resolution_clock::now();
 	#endif
+	int countRemoved = 0;
 	for (int i = circles.size() - 1; i >= 0; i--)
 	{
 		cv::Rect2i boundingBox((int)(circles[i].center.x - circles[i].radius), (int)(circles[i].center.y - circles[i].radius), (int)(circles[i].radius * 2), (int)(circles[i].radius * 2));
@@ -270,11 +271,14 @@ void removeFalsePositiveCircles(std::vector<Circle> &circles)
 		cv::Mat resultImg = referenceImg & edgeImg;
 		float value = cv::sum(resultImg)[0] / 255.0f / (2 * M_PI * circles[i].radius);
 		circles[i].removed = value < 0.25f;
+		if (circles[i].removed)
+			++countRemoved;
 	}
 	#ifdef _BENCHMARK
 		auto end = std::chrono::high_resolution_clock::now();
 		gTimeRemoveFalsePositive += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
 	#endif 
+	return countRemoved;
 }
 
 void cannyCallback(int slider, void *userData)
@@ -378,7 +382,7 @@ void cannyCallback(int slider, void *userData)
 		gRects.push_back(cell->extension());
 	#endif
 	houghTransform(cell, pointClouds, circles);
-	removeFalsePositiveCircles(circles);
+	int countFalsePositives = 0;//removeFalsePositiveCircles(circles);
 	end = std::chrono::high_resolution_clock::now();
 	auto durationDetection = std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
 	std::cout << "Time elapsed: " << durationDetection / 1e6 << "ms" << std::endl;
@@ -403,27 +407,29 @@ void cannyCallback(int slider, void *userData)
 		}
 	}
 	cv::Mat img = gFrame.clone();
-	for (const Circle &circle : circles)
+	if (countFalsePositives > 0)
 	{
-		if (circle.removed)
+		for (const Circle &circle : circles)
 		{
-			drawCircle(circle, cv::Scalar(0, 0, 255), 2);
+			if (circle.removed)
+			{
+				drawCircle(circle, cv::Scalar(0, 0, 255), 2);
+			}
+			else
+			{
+				drawCircle(circle, cv::Scalar(255, 255, 255), 2);
+			}
 		}
-		else
-		{
-			drawCircle(circle, cv::Scalar(255, 255, 255), 2);
-		}
+		// Display image
+		cv::imshow(gEdgeWindowName + "_false positives", gFrame);
 	}
-	// Display image
-	cv::imshow(gEdgeWindowName, gFrame);
-	cv::waitKey(0);
 	// Display image without false circles 
 	gFrame = img;
 	for (const Circle &circle : circles)
 	{
 		if (!circle.removed)
 		{
-			drawCircle(circle, cv::Scalar(255, 255, 255), 2);
+			drawCircle(circle, cv::Scalar(0, 255, 0), 2);
 		}
 	}
 	cv::imshow(gEdgeWindowName, gFrame);
@@ -474,6 +480,7 @@ int main(int argc, char **argv)
 	}
 	cv::namedWindow(gEdgeWindowName, CV_WINDOW_AUTOSIZE);
 	cv::createTrackbar("Min threshold:", gEdgeWindowName, &gCannyLowThreshold, 100, cannyCallback);
+	cv::createTrackbar("Min arc length:", gEdgeWindowName, &gMinArcLength, gNumAngles, cannyCallback);
 	cannyCallback(gCannyLowThreshold, NULL);
 	//cv::imshow("Original image", gImg);
 	cv::waitKey(0);

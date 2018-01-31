@@ -9,6 +9,8 @@
 
 #include "pointcloud.h"
 
+#define MAX_NUM_SAMPLES 20
+
 class Sampler
 {
 public:

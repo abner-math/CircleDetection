@@ -34,7 +34,7 @@ cv::Rect2f PointCloud::createPointCloudsFromImage(const cv::Mat &img, int cannyL
 		begin = std::chrono::high_resolution_clock::now();
 	#endif
 	pointClouds = std::vector<PointCloud>(numConnectedComponents, PointCloud(numAngles));
-	std::map<int, int> indices;
+	//std::map<int, int> indices;
 	for (int edgeIndex = 0; edgeIndex < imgUtils.numEdges(); edgeIndex++)
 	{
 		Point point;
@@ -42,40 +42,40 @@ cv::Rect2f PointCloud::createPointCloudsFromImage(const cv::Mat &img, int cannyL
 		point.normal = imgUtils.normal(edgeIndex);
 		point.angleIndex = imgUtils.angleIndexOf(edgeIndex);
 		point.curvature = imgUtils.curvature(edgeIndex);
-		point.count = 1;
+		//point.count = 1;
 		int label = imgUtils.labelOf(edgeIndex);
 		pointClouds[label].mPoints.push_back(point);
 		int group = imgUtils.groupOf(edgeIndex); 
 		if (group == edgeIndex)
 		{
-			indices[edgeIndex] = pointClouds[label].mGroups.size();
+			//indices[edgeIndex] = pointClouds[label].mGroups.size();
 			pointClouds[label].mGroups.push_back(point);
 		}
-		else
+		/*else
 		{
 			pointClouds[label].mGroups[indices[group]].position += point.position;
 			pointClouds[label].mGroups[indices[group]].normal += point.normal;
 			pointClouds[label].mGroups[indices[group]].curvature += point.curvature;
 			++pointClouds[label].mGroups[indices[group]].count;
-		}
+		}*/
 	}
 	for (int i = 0; i < numConnectedComponents; i++)
 	{
-		for (Point &point : pointClouds[i].mGroups)
+		/*for (Point &point : pointClouds[i].mGroups)
 		{
 			point.position /= point.count;
 			point.normal /= point.count;
 			point.normal /= norm(point.normal);
 			point.curvature /= point.count;
-		}
+		}*/
 		pointClouds[i].mCenter = imgUtils.center(i);
 		pointClouds[i].setExtension();
 		pointClouds[i].sortPointsByCurvature();
 	}
-	std::sort(pointClouds.begin(), pointClouds.end(), [](const PointCloud &a, const PointCloud &b)
+	/*std::sort(pointClouds.begin(), pointClouds.end(), [](const PointCloud &a, const PointCloud &b)
 	{
 		return a.numGroups() > b.numGroups();
-	});
+	});*/
 	cv::Rect extension = getExtension(pointClouds);
 	#ifdef _BENCHMARK
 		end = std::chrono::high_resolution_clock::now();

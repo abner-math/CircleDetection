@@ -64,7 +64,7 @@ std::pair<size_t, size_t> Sampler::sample()
 		auto begin = std::chrono::high_resolution_clock::now();
 	#endif 
 	p.first = selectRandomPoint();
-	if (++mNumPicksPerPoint[p.first] > 10)
+	if (++mNumPicksPerPoint[p.first] > MAX_NUM_SAMPLES)
 	{
 		removePoint(p.first);
 	}
@@ -74,7 +74,7 @@ std::pair<size_t, size_t> Sampler::sample()
 		begin = std::chrono::high_resolution_clock::now();
 	#endif 
 	p.second = selectAnotherRandomPoint(p.first);
-	if (++mNumPicksPerPoint[p.second] > 10)
+	if (++mNumPicksPerPoint[p.second] > MAX_NUM_SAMPLES)
 	{
 		removePoint(p.second);
 	}
