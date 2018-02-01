@@ -66,7 +66,7 @@ std::pair<size_t, size_t> Sampler::sample()
 	#endif 
 	size_t maxNumSamples = 360 / mPointCloud.numAngles() * 10;
 	p.first = selectRandomPoint();
-	if (++mNumPicksPerPoint[p.first] > mPointCloud.point(p.first).count * maxNumSamples)
+	if (++mNumPicksPerPoint[p.first] > maxNumSamples)
 	{
 		removePoint(p.first);
 	}
@@ -76,7 +76,7 @@ std::pair<size_t, size_t> Sampler::sample()
 		begin = std::chrono::high_resolution_clock::now();
 	#endif 
 	p.second = selectAnotherRandomPoint(p.first);
-	if (++mNumPicksPerPoint[p.second] > mPointCloud.point(p.second).count * maxNumSamples)
+	if (++mNumPicksPerPoint[p.second] > maxNumSamples)
 	{
 		removePoint(p.second);
 	}

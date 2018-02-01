@@ -111,7 +111,15 @@ private:
 	
 	float angleBetween(int a, int b) const 
 	{
-		return std::acos(std::abs(normal(a).dot(normal(b)))) * 180.0f / M_PI;
+		int angle1 = mAngleIndices[a];
+		int angle2 = mAngleIndices[b];
+		if (angle1 > mNumAngles / 2)
+			angle1 -= mNumAngles / 2;
+		if (angle2 > mNumAngles / 2)
+			angle2 -= mNumAngles /2 ;
+		int diff = std::abs(angle1 - angle2);
+		return std::min(diff, mNumAngles / 2 - diff);
+		//return std::acos(std::abs(normal(a).dot(normal(b)))) * 180.0f / M_PI;
 	}
 	
 	int neighborIndex(int index, int neighbor) const 

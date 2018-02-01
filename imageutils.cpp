@@ -121,8 +121,8 @@ void ImageUtils::calculateNeighborAngles()
 	
 int ImageUtils::createConnectedComponents()
 {
-	calculateNeighborAngles();
 	calculateAngleIndices();
+	calculateNeighborAngles();
 	std::queue<int> queue;
 	bool *marked = (bool*)calloc(mNumEdges, sizeof(bool));
 	mLabels = new int[mNumEdges];
@@ -148,7 +148,7 @@ int ImageUtils::createConnectedComponents()
 				{
 					int neighbor = neighborIndex(index, i);
 					int edgeNeighbor = mEdgeIndices[neighbor];
-					if (isEdge(neighbor) && !marked[edgeNeighbor] && mNeighborAngles[edgeNeighbor * 8 + 7 - i] < 20)
+					if (isEdge(neighbor) && !marked[edgeNeighbor] && mNeighborAngles[edgeNeighbor * 8 + 7 - i] < 6)
 					{
 						marked[edgeNeighbor] = true;
 						mLabels[edgeNeighbor] = numLabels;

@@ -35,6 +35,7 @@ double gTimeAddIntersection;
 double gTimeAddIntersectionsChildren;
 double gTimeAddEllipse;
 double gTimeRemoveFalsePositive;
+double gTimeRemoveEllipsePoints;
 #endif 
 
 #ifdef _DEBUG_INTERACTIVE
@@ -309,16 +310,26 @@ void subdivide(HoughCell *parentCell, HoughAccumulator *accumulator, const std::
 			auto begin = std::chrono::high_resolution_clock::now();
 		#endif
 		Ellipse ellipse = accumulator->getEllipseCandidate();
-		ellipse.falsePositive = isFalsePositive(ellipse);
-		if (!ellipse.falsePositive)
-		{
-			removeEllipsePoints(cell, ellipse, pointClouds);
-		}
-		ellipses.push_back(ellipse);
 		#ifdef _BENCHMARK
 			auto end = std::chrono::high_resolution_clock::now();
 			gTimeAddEllipse += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+			begin = std::chrono::high_resolution_clock::now();
 		#endif 
+		ellipse.falsePositive = isFalsePositive(ellipse);
+		#ifdef _BENCHMARK
+			end = std::chrono::high_resolution_clock::now();
+			gTimeRemoveFalsePositive += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+			begin = std::chrono::high_resolution_clock::now();
+		#endif
+		if (!ellipse.falsePositive)
+		{
+			removeEllipsePoints(cell, ellipse, pointClouds);
+			#ifdef _BENCHMARK
+				end = std::chrono::high_resolution_clock::now();
+				gTimeRemoveEllipsePoints += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+			#endif
+		}
+		ellipses.push_back(ellipse);
 		#ifdef _DEBUG_INTERACTIVE
 			displayInteractiveFrame(pointClouds, parentCell, accumulator, ellipses);
 		#endif
@@ -361,6 +372,8 @@ void cannyCallback(int slider, void *userData)
 		gTimeAddIntersection = 0;
 		gTimeAddIntersectionsChildren = 0;
 		gTimeAddEllipse = 0;
+		gTimeRemoveEllipsePoints = 0;
+		gTimeRemoveFalsePositive = 0;
 	#endif 
 	std::cout << "Preprocessing..." << std::endl;
 	auto begin = std::chrono::high_resolution_clock::now();
@@ -450,7 +463,9 @@ void cannyCallback(int slider, void *userData)
 					<< "\tTime to add intersection: " << gTimeAddIntersection / 1e6 << "ms (" << gTimeAddIntersection / durationDetection * 100 << "%)" << std::endl
 					<< "\tTime to add intersections to children: " << gTimeAddIntersectionsChildren / 1e6 << "ms (" << gTimeAddIntersectionsChildren / durationDetection * 100 << "%)" << std::endl
 					<< "\tTime to add ellipse: " << gTimeAddEllipse / 1e6 << "ms (" << gTimeAddEllipse / durationDetection * 100 << "%)" << std::endl
-					<< "\tExplained: " << (gTimeSample1 + gTimeSample2 + gTimeIntersection + gTimeAddIntersection + gTimeAddIntersectionsChildren + gTimeAddEllipse + gTimeRemoveFalsePositive) / durationDetection * 100 << "%" << std::endl;
+					<< "\tTime to remove ellipse points: " << gTimeRemoveEllipsePoints / 1e6 << "ms (" << gTimeRemoveEllipsePoints / durationDetection * 100 << "%)" << std::endl
+					<< "\tTime to remove false positives: " << gTimeRemoveFalsePositive / 1e6 << "ms (" << gTimeRemoveFalsePositive / durationDetection * 100 << "%)" << std::endl
+					<< "\tExplained: " << (gTimeSample1 + gTimeSample2 + gTimeIntersection + gTimeAddIntersection + gTimeAddIntersectionsChildren + gTimeAddEllipse + gTimeRemoveEllipsePoints + gTimeRemoveFalsePositive) / durationDetection * 100 << "%" << std::endl;
 	#endif 
 	std::cout << "Num ellipses: " << ellipses.size() << std::endl;
 	std::cout << "Total time elapsed: " << (durationPreprocessing + durationDetection) / 1e6 << "ms" << std::endl;

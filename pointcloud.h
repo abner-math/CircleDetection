@@ -9,8 +9,8 @@ struct Point
 	cv::Point2f position; 
 	cv::Point2f normal;
 	int angleIndex;
-	float curvature;
-	int count;
+	//float curvature;
+	//int count;
 };
 
 class Sampler;
