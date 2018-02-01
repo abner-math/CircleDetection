@@ -9,12 +9,10 @@
 
 #include "pointcloud.h"
 
-#define MAX_NUM_SAMPLES 20
-
 class Sampler
 {
 public:
-	Sampler(const PointCloud &pointCloud, short minArcLength);
+	Sampler(const PointCloud &pointCloud, short minNumAngles);
 	
 	~Sampler();
 	
@@ -28,19 +26,14 @@ public:
 		return mPointCloud.numGroups();
 	}
 	
-	short numAngles() const 
+	short minNumAngles() const 
 	{
-		return mPointCloud.numAngles();
+		return mMinNumAngles;
 	}
 	
 	const PointCloud& pointCloud() const 
 	{
 		return mPointCloud;
-	}
-	
-	short minArcLength() const 
-	{
-		return mMinArcLength;
 	}
 	
 	bool canSample() const;
@@ -59,7 +52,7 @@ private:
 	static boost::exponential_distribution<float> sDistribution;
 	static boost::variate_generator<boost::mt19937, boost::exponential_distribution<float> > sGenerator;
 	const PointCloud &mPointCloud;
-	const short mMinArcLength;
+	const short mMinNumAngles;
 	size_t *mPoints;
 	size_t **mPointsPerAngle;
 	size_t *mTotalNumPointsPerAngle;
@@ -77,13 +70,13 @@ private:
 	
 	short decreaseOneAngle(short angle) const
 	{
-		if (angle == 0) return numAngles() - 1;
+		if (angle == 0) return mPointCloud.numAngles() - 1;
 		return angle - 1;
 	}
 	
 	short increaseOneAngle(short angle) const 
 	{
-		if (angle == numAngles() - 1) return 0;
+		if (angle == mPointCloud.numAngles() - 1) return 0;
 		return angle + 1;
 	}
 	

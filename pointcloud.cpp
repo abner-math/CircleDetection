@@ -34,7 +34,7 @@ cv::Rect2f PointCloud::createPointCloudsFromImage(const cv::Mat &img, int cannyL
 		begin = std::chrono::high_resolution_clock::now();
 	#endif
 	pointClouds = std::vector<PointCloud>(numConnectedComponents, PointCloud(numAngles));
-	//std::map<int, int> indices;
+	std::map<int, int> indices;
 	for (int edgeIndex = 0; edgeIndex < imgUtils.numEdges(); edgeIndex++)
 	{
 		Point point;
@@ -42,14 +42,18 @@ cv::Rect2f PointCloud::createPointCloudsFromImage(const cv::Mat &img, int cannyL
 		point.normal = imgUtils.normal(edgeIndex);
 		point.angleIndex = imgUtils.angleIndexOf(edgeIndex);
 		point.curvature = imgUtils.curvature(edgeIndex);
-		//point.count = 1;
+		point.count = 1;
 		int label = imgUtils.labelOf(edgeIndex);
 		pointClouds[label].mPoints.push_back(point);
 		int group = imgUtils.groupOf(edgeIndex); 
 		if (group == edgeIndex)
 		{
-			//indices[edgeIndex] = pointClouds[label].mGroups.size();
+			indices[edgeIndex] = pointClouds[label].mGroups.size();
 			pointClouds[label].mGroups.push_back(point);
+		}
+		else
+		{
+			++pointClouds[label].mGroups[indices[group]].count;
 		}
 		/*else
 		{

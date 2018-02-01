@@ -14,7 +14,7 @@ extern double gTimeSample1;
 extern double gTimeSample2;
 extern double gTimeIntersection;
 extern double gTimeAddIntersection;
-extern double gTimeVisit;
+extern double gTimeAddIntersectionsChildren;
 extern double gTimeAddCircle;
 extern double gTimeRemoveFalsePositive;
 

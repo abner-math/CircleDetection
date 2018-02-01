@@ -3,48 +3,63 @@
 
 #include "houghaccumulator.h"
 
+#define MAX_INTERSECTION_RATIO 1.5f
+
 class HoughCell 
 {
 public: 
-	HoughCell(const cv::Rect &extension, short minArcLength, short branchingFactor, float maxIntersectionRatio = 1.5f);
-	
-	HoughCell(HoughCell *parent, short indX, short indY);
+	HoughCell(const cv::Rect2f &maxExtension, const cv::Point2f &center, float size, short numAngles, short minNumAngles);
 	
 	~HoughCell();
 	
-	HoughCell* parent() const 
+	const HoughCell* child(size_t index) const 
 	{
-		return mParent;
+		return mChildren[index];
 	}
 	
-	float cellSize() const 
+	size_t numAccumulators() const 
 	{
-		return mExtension.width;
+		return mNumAccumulators;
 	}
 	
-	short branchingFactor() const 
+	const HoughAccumulator* accumulator(size_t index) const 
 	{
-		return mBranchingFactor;
+		return mAccumulators[index];
 	}
 	
-	short indX() const 
+	const cv::Rect2f& maxExtension() const 
 	{
-		return mIndX;
+		return mMaxExtension;
 	}
 	
-	short indY() const 
+	cv::Rect2f extension() const 
 	{
-		return mIndY;
+		return cv::Rect2f(mCenter.x - mSize, mCenter.y - mSize, mSize * 2, mSize * 2);
 	}
 	
-	const cv::Rect2f& extension() const 
+	const cv::Point2f& center() const 
 	{
-		return mExtension;
+		return mCenter;
 	}
 	
-	const short minArcLength() const 
+	float size() const
 	{
-		return mMinArcLength;
+		return mSize;
+	}
+	
+	short numAngles() const 
+	{
+		return mNumAngles;
+	}
+	
+	short minNumAngles() const 
+	{
+		return mMinNumAngles;
+	}
+	
+	size_t depth() const 
+	{
+		return mDepth;
 	}
 	
 	bool isVisited() const 
@@ -52,32 +67,28 @@ public:
 		return mVisited;
 	}
 	
-	std::set<HoughAccumulator*> visit();
+	void setVisited()
+	{
+		mVisited = true;
+	}
 	
-	void setVisited();
+	std::set<HoughAccumulator*> addIntersectionsToChildren();
 	
 	HoughAccumulator* addIntersection(Sampler *sampler);
 	
 private:
-	const short mMinArcLength;
-	const short mBranchingFactor;
-	const float mMaxIntersectionRatio;
-	HoughCell *mParent;
-	HoughCell **mChildren;
-	cv::Rect2f mExtension;
-	short mIndX, mIndY;
+	HoughCell *mChildren[4];
+	cv::Rect2f mMaxExtension;
+	cv::Point2f mCenter;
+	float mSize;
+	short mNumAngles;
+	short mMinNumAngles;
 	bool mVisited;
-	std::vector<HoughAccumulator*> mAccumulators;
+	size_t mNumAccumulators;
+	size_t mDepth;
+	HoughAccumulator **mAccumulators;
 		
 	bool intersectionBetweenPoints(Sampler *sampler, const std::pair<size_t, size_t> &sample, Intersection &intersection);
-
-	short getChildIndex(const cv::Point2f &point, short &indX, short &indY)
-	{
-		cv::Point2f normalized = (point - mExtension.tl()) / mExtension.width;
-		indX = static_cast<short>(normalized.x * mBranchingFactor);
-		indY = static_cast<short>(normalized.y * mBranchingFactor);
-		return indY * mBranchingFactor + indX;
-	}
 
 	HoughAccumulator* accumulate(const Intersection &intersection);
 	

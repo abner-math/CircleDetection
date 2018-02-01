@@ -32,7 +32,7 @@ class HoughCell;
 class HoughAccumulator
 {
 public:
-	HoughAccumulator(HoughCell *cell);
+	HoughAccumulator(HoughCell *cell, float radius);
 	
 	~HoughAccumulator();
 	
@@ -41,9 +41,12 @@ public:
 		return mCell;
 	}
 	
-	float radius() const;
+	float radius() const
+	{
+		return mRadius;
+	}
 	
-	const std::set<Intersection>& intersections() const 
+	const std::vector<Intersection>& intersections() const 
 	{
 		return mIntersections;
 	}
@@ -52,12 +55,20 @@ public:
 	
 	bool hasCircleCandidate() const;
 	
-	Circle getCircleCandidate() const;
+	Circle getCircleCandidate();
+	
+	bool isVisited() const 
+	{
+		return mVisited;
+	}
 	
 private:
 	HoughCell *mCell;
-	std::set<size_t> mAngles;
-	std::set<Intersection> mIntersections;
+	float mRadius;
+	bool *mAngles;
+	size_t mNumAngles;
+	bool mVisited;
+	std::vector<Intersection> mIntersections;
 	
 };
 

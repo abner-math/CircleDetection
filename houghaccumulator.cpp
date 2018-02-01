@@ -4,38 +4,45 @@
 
 #include "houghcell.h"
 
-HoughAccumulator::HoughAccumulator(HoughCell *cell)
+HoughAccumulator::HoughAccumulator(HoughCell *cell, float radius)
 	: mCell(cell)
+	, mRadius(radius)
+	, mNumAngles(0)
+	, mVisited(false)
 {
-	
+	mAngles = (bool*)calloc(cell->numAngles(), sizeof(bool));
 }
 
 HoughAccumulator::~HoughAccumulator()
 {
-	
-}
-
-float HoughAccumulator::radius() const
-{
-	auto it = mIntersections.begin();
-	std::advance(it, mIntersections.size() / 2);
-	return it->dist;
+	delete[] mAngles;
 }
 
 void HoughAccumulator::accumulate(const Intersection &intersection)
 {
-	mIntersections.insert(intersection);
-	mAngles.insert(intersection.sampler->pointCloud().group(intersection.p1).angleIndex);
-	mAngles.insert(intersection.sampler->pointCloud().group(intersection.p2).angleIndex);
+	size_t angle1 = intersection.sampler->pointCloud().group(intersection.p1).angleIndex;
+	size_t angle2 = intersection.sampler->pointCloud().group(intersection.p2).angleIndex;
+	if (!mAngles[angle1])
+	{
+		mAngles[angle1] = true;
+		++mNumAngles;
+	}
+	if (!mAngles[angle2])
+	{
+		mAngles[angle2] = true;
+		++mNumAngles;
+	}
+	mIntersections.push_back(intersection);
 }
 
 bool HoughAccumulator::hasCircleCandidate() const 
 {
-	return mAngles.size() >= mCell->minArcLength() && mIntersections.size() > mCell->minArcLength();
+	return mIntersections.size() > 6 && mNumAngles >= mCell->minNumAngles();
 }
 
-Circle HoughAccumulator::getCircleCandidate() const 
+Circle HoughAccumulator::getCircleCandidate()  
 {
+	mVisited = true;
 	std::vector<float> xs, ys;
 	for (const Intersection &intersection : mIntersections)
 	{
