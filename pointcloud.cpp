@@ -74,12 +74,12 @@ cv::Rect2f PointCloud::createPointCloudsFromImage(const cv::Mat &img, int cannyL
 		}*/
 		pointClouds[i].mCenter = imgUtils.center(i);
 		pointClouds[i].setExtension();
-		pointClouds[i].sortPointsByCurvature();
+		//pointClouds[i].sortPointsByCurvature();
 	}
-	std::sort(pointClouds.begin(), pointClouds.end(), [](const PointCloud &a, const PointCloud &b)
+	/*std::sort(pointClouds.begin(), pointClouds.end(), [](const PointCloud &a, const PointCloud &b)
 	{
 		return a.group(a.numGroups() / 2).curvature > b.group(b.numGroups() / 2).curvature;
-	});
+	});*/
 	cv::Rect extension = getExtension(pointClouds);
 	#ifdef _BENCHMARK
 		end = std::chrono::high_resolution_clock::now();
