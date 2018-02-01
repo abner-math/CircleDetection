@@ -6,10 +6,9 @@
 #include "sampler.h"
 #include "circlefunctor.h"
 
-struct Circle
+struct Ellipse
 {
-	cv::Point2f center;
-	float radius;
+	cv::RotatedRect ellipse;
 	bool removed;
 };
 
@@ -53,9 +52,9 @@ public:
 	
 	void accumulate(const Intersection &intersection);
 	
-	bool hasCircleCandidate() const;
+	bool hasEllipseCandidate() const;
 	
-	Circle getCircleCandidate();
+	Ellipse getEllipseCandidate();
 	
 	bool isVisited() const 
 	{

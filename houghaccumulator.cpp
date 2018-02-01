@@ -35,12 +35,12 @@ void HoughAccumulator::accumulate(const Intersection &intersection)
 	mIntersections.push_back(intersection);
 }
 
-bool HoughAccumulator::hasCircleCandidate() const 
+bool HoughAccumulator::hasEllipseCandidate() const 
 {
 	return mIntersections.size() > 6 && mNumAngles >= mCell->minNumAngles();
 }
 
-Circle HoughAccumulator::getCircleCandidate()  
+Ellipse HoughAccumulator::getEllipseCandidate()  
 {
 	mVisited = true;
 	std::vector<float> xs, ys;
@@ -74,7 +74,7 @@ Circle HoughAccumulator::getCircleCandidate()
 		return a.dist < b.dist;
 	});
 	// least squares with only first half of intersections
-	Eigen::Matrix2Xf points(2, newIntersections.size() / 2 * 2);
+	/*Eigen::Matrix2Xf points(2, newIntersections.size() / 2 * 2);
 	int col = 0;
 	for (int i = 0; i < newIntersections.size() / 2; i++)
 	{
@@ -85,12 +85,22 @@ Circle HoughAccumulator::getCircleCandidate()
 	}
 	Eigen::VectorXf params(3);
 	params << center.x, center.y, newRadius;
-	CircleFunctor functor(points);
-	Eigen::LevenbergMarquardt<CircleFunctor, float> lm(functor);
+	EllipseFunctor functor(points);
+	Eigen::LevenbergMarquardt<EllipseFunctor, float> lm(functor);
 	lm.minimize(params);
-	Circle circle;
+	Ellipse circle;
 	circle.center = cv::Point2f(params(0), params(1));
-	circle.radius = std::abs(params(2));
-	return circle;
+	circle.radius = std::abs(params(2));*/
+	std::vector<cv::Point2f> points;
+	for (size_t i = 0; i < newIntersections.size() / 2; i++)
+	{
+		cv::Point2f p1 = newIntersections[i].sampler->pointCloud().group(newIntersections[i].p1).position;
+		cv::Point2f p2 = newIntersections[i].sampler->pointCloud().group(newIntersections[i].p2).position;
+		points.push_back(p1);
+		points.push_back(p2);
+	}
+	Ellipse ellipse;
+	ellipse.ellipse = cv::fitEllipse(points);
+	return ellipse;
 }
 

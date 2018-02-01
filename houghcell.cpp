@@ -51,7 +51,7 @@ std::set<HoughAccumulator*> HoughCell::addIntersectionsToChildren()
 			for (const Intersection &intersection : mAccumulators[i]->intersections())
 			{
 				HoughAccumulator *childAccumulator = addIntersection(intersection);
-				if (childAccumulator != NULL && childAccumulator->hasCircleCandidate())
+				if (childAccumulator != NULL && childAccumulator->hasEllipseCandidate())
 				{
 					accumulators.insert(childAccumulator);
 				}

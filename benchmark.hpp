@@ -15,7 +15,7 @@ extern double gTimeSample2;
 extern double gTimeIntersection;
 extern double gTimeAddIntersection;
 extern double gTimeAddIntersectionsChildren;
-extern double gTimeAddCircle;
+extern double gTimeAddEllipse;
 extern double gTimeRemoveFalsePositive;
 
 #endif // BENCHMARK_H

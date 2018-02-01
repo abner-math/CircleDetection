@@ -137,7 +137,7 @@ size_t Sampler::selectRandomPoint()
 
 size_t Sampler::selectAnotherRandomPoint(size_t point)
 {
-	short angle = (short)(getRandomValueFromExponentialDist() * (mPointCloud.numAngles() / 2) + angleIndex(point) + mPointCloud.numAngles() / 4) % mPointCloud.numAngles();
+	short angle = (short)(getRandomValueFromExponentialDist() * mPointCloud.numAngles() + angleIndex(point) + mPointCloud.numAngles() / 4) % mPointCloud.numAngles();
 	size_t anotherPoint = selectRandomPointWithValidAngle(angle);
 	if (anotherPoint < numPoints()) return anotherPoint;
 	return selectRandomPoint();
