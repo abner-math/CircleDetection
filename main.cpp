@@ -309,7 +309,8 @@ void subdivide(HoughCell *parentCell, HoughAccumulator *accumulator, const std::
 			auto begin = std::chrono::high_resolution_clock::now();
 		#endif
 		Ellipse ellipse = accumulator->getEllipseCandidate();
-		if (!isFalsePositive(ellipse))
+		ellipse.falsePositive = isFalsePositive(ellipse);
+		if (!ellipse.falsePositive)
 		{
 			removeEllipsePoints(cell, ellipse, pointClouds);
 		}
