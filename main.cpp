@@ -1,4 +1,4 @@
-#define _DEBUG_INTERACTIVE
+//#define _DEBUG_INTERACTIVE
 
 #include <iostream>
 #include <map>
@@ -162,25 +162,29 @@ void displayInteractiveFrame(const std::vector<PointCloud> &pointClouds, const H
 			{
 				drawPoint(pointCloud.group(i).position, cv::Scalar(0, 0, 255));
 			}
+			else
+			{
+				drawPoint(pointCloud.group(i).position, cv::Scalar(255, 255, 255));
+			}
 		}
 	}
 	drawCells(cell, accumulator);
 	for (const Ellipse &ellipse : ellipses)
 	{
-		drawEllipse(ellipse, cv::Scalar(255, 0, 0));
+		if (ellipse.falsePositive)
+		{
+			drawEllipse(ellipse, cv::Scalar(0, 0, 255));
+		}
+		else
+		{
+			drawEllipse(ellipse, cv::Scalar(255, 0, 0));
+		}
 	}
 	cv::imshow(gEdgeWindowName, gFrame);
 	cv::waitKey(0);
 	gFrame = img;
 }
 #endif 
-
-bool isPointOnEllipse(const HoughCell *cell, const Ellipse &ellipse, const cv::Point2f &point)
-{
-	//float dist = norm(point - circle.center);
-	//return std::abs(dist - circle.radius) < cell->size();
-	return false;
-}
 
 bool ellipseIntersectsRect(const Ellipse &ellipse, const cv::Rect2f &rect)
 {
@@ -235,21 +239,50 @@ cv::Point2f closestPointInRect(const cv::Rect2f &rect, const cv::Point2f &point)
 	return cv::Point2f(closestX, closestY);
 }
 
-void removeCirclePoints(const HoughCell *cell, const Ellipse &ellipse, const std::vector<PointCloud> &pointClouds)
+void removeEllipsePoints(const HoughCell *cell, const Ellipse &ellipse, const std::vector<PointCloud> &pointClouds)
 {
-	for (const PointCloud &pointCloud : pointClouds)
+	cv::Mat img = cv::Mat::zeros(gImg.size(), CV_8U);
+	cv::ellipse(img, ellipse.ellipse, cv::Scalar(255, 255, 255), 1);
+	std::vector<std::vector<cv::Point> > contours; 
+	std::vector<cv::Vec4i> hierarchy;
+	cv::findContours(img, contours, hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_SIMPLE);
+	if (!contours.empty())
 	{
-		if (ellipseIntersectsRect(ellipse, pointCloud.extension()) || norm(closestPointInRect(pointCloud.extension(), ellipse.ellipse.center) - ellipse.ellipse.center) < cell->size())
+		for (const PointCloud &pointCloud : pointClouds)
 		{
-			Sampler *sampler = pointCloud.sampler();
-			for (size_t i = 0; i < sampler->numPoints(); i++)
+			if (ellipseIntersectsRect(ellipse, pointCloud.extension()) || norm(closestPointInRect(pointCloud.extension(), ellipse.ellipse.center) - ellipse.ellipse.center) < cell->size())
 			{
-				if (!sampler->isRemoved(i) && isPointOnEllipse(cell, ellipse, pointCloud.group(i).position))
+				Sampler *sampler = pointCloud.sampler();
+				for (size_t i = 0; i < sampler->numPoints(); i++)
 				{
-					sampler->removePoint(i);
+					if (!sampler->isRemoved(i) && std::abs(cv::pointPolygonTest(contours[0], pointCloud.group(i).position, true)) < cell->size())
+					{
+						sampler->removePoint(i);
+					}
 				}
 			}
 		}
+	}
+}
+
+bool isFalsePositive(Ellipse &ellipse)
+{
+	cv::Mat edgeImg = PointCloud::edgeImg();
+	cv::Mat referenceImg = cv::Mat::zeros(gFrame.size(), CV_8U);
+	cv::ellipse(referenceImg, ellipse.ellipse, cv::Scalar(255, 255, 255), 2);
+	std::vector<std::vector<cv::Point> > contours; 
+	std::vector<cv::Vec4i> hierarchy;
+	cv::findContours(referenceImg, contours, hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_SIMPLE);
+	if (contours.empty())
+	{
+		return true;
+	}
+	else
+	{
+		double perimeter = cv::arcLength(contours[0], true);
+		cv::Mat resultImg = referenceImg & edgeImg;
+		double value = cv::sum(resultImg)[0] / 255.0 / perimeter;
+		return value < 0.25f;
 	}
 }
 
@@ -276,8 +309,11 @@ void subdivide(HoughCell *parentCell, HoughAccumulator *accumulator, const std::
 			auto begin = std::chrono::high_resolution_clock::now();
 		#endif
 		Ellipse ellipse = accumulator->getEllipseCandidate();
+		if (!isFalsePositive(ellipse))
+		{
+			removeEllipsePoints(cell, ellipse, pointClouds);
+		}
 		ellipses.push_back(ellipse);
-		removeCirclePoints(cell, ellipse, pointClouds);
 		#ifdef _BENCHMARK
 			auto end = std::chrono::high_resolution_clock::now();
 			gTimeAddEllipse += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
@@ -310,40 +346,6 @@ void findEllipses(HoughCell *cell, const std::vector<PointCloud> &pointClouds, s
 	}
 } 
 
-int removeFalsePositiveEllipses(std::vector<Ellipse> &ellipses)
-{
-	#ifdef _BENCHMARK
-		auto begin = std::chrono::high_resolution_clock::now();
-	#endif
-	int countRemoved = 0;
-	for (Ellipse &ellipse : ellipses)
-	{
-		cv::Rect2i boundingBox = ellipse.ellipse.boundingRect();
-		if (boundingBox.width < 5 || boundingBox.height < 5 || boundingBox.x < 0 || boundingBox.y < 0 || boundingBox.x + boundingBox.width > gImg.cols || boundingBox.y + boundingBox.height > gImg.rows)
-		{
-			ellipse.removed = true;
-		}
-		else
-		{
-			cv::Mat edgeImg = PointCloud::edgeImg()(boundingBox);
-			cv::Mat referenceImg = cv::Mat::zeros(cv::Size(boundingBox.width, boundingBox.height), CV_8U);
-			drawEllipse(ellipse, cv::Scalar(255, 255, 255), 3);
-			cv::Mat resultImg = referenceImg & edgeImg;
-			double perimeter = cv::arcLength(referenceImg, true);
-			double value = cv::sum(resultImg)[0] / 255.0 / perimeter;
-			std::cout << perimeter << " " << value << std::endl;
-			ellipse.removed = value < 0.25f;
-		}
-		if (ellipse.removed)
-			++countRemoved;
-	}
-	#ifdef _BENCHMARK
-		auto end = std::chrono::high_resolution_clock::now();
-		gTimeRemoveFalsePositive += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
-	#endif 
-	return countRemoved;
-}
-
 void cannyCallback(int slider, void *userData)
 {
 	#ifdef _BENCHMARK
@@ -358,7 +360,6 @@ void cannyCallback(int slider, void *userData)
 		gTimeAddIntersection = 0;
 		gTimeAddIntersectionsChildren = 0;
 		gTimeAddEllipse = 0;
-		gTimeRemoveFalsePositive = 0;
 	#endif 
 	std::cout << "Preprocessing..." << std::endl;
 	auto begin = std::chrono::high_resolution_clock::now();
@@ -438,7 +439,6 @@ void cannyCallback(int slider, void *userData)
 	begin = std::chrono::high_resolution_clock::now();
 	std::vector<Ellipse> ellipses;
 	findEllipses(cell, pointClouds, ellipses);
-	int countFalsePositives = removeFalsePositiveEllipses(ellipses);
 	end = std::chrono::high_resolution_clock::now();
 	auto durationDetection = std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
 	std::cout << "Time elapsed: " << durationDetection / 1e6 << "ms" << std::endl;
@@ -449,43 +449,22 @@ void cannyCallback(int slider, void *userData)
 					<< "\tTime to add intersection: " << gTimeAddIntersection / 1e6 << "ms (" << gTimeAddIntersection / durationDetection * 100 << "%)" << std::endl
 					<< "\tTime to add intersections to children: " << gTimeAddIntersectionsChildren / 1e6 << "ms (" << gTimeAddIntersectionsChildren / durationDetection * 100 << "%)" << std::endl
 					<< "\tTime to add ellipse: " << gTimeAddEllipse / 1e6 << "ms (" << gTimeAddEllipse / durationDetection * 100 << "%)" << std::endl
-					<< "\tTime to remove false positives: " << gTimeRemoveFalsePositive / 1e6 << "ms (" << gTimeRemoveFalsePositive / durationDetection * 100 << "%)" << std::endl
 					<< "\tExplained: " << (gTimeSample1 + gTimeSample2 + gTimeIntersection + gTimeAddIntersection + gTimeAddIntersectionsChildren + gTimeAddEllipse + gTimeRemoveFalsePositive) / durationDetection * 100 << "%" << std::endl;
 	#endif 
 	std::cout << "Num ellipses: " << ellipses.size() << std::endl;
 	std::cout << "Total time elapsed: " << (durationPreprocessing + durationDetection) / 1e6 << "ms" << std::endl;
-	// Draw circles 
+	// Draw ellipses  
 	for (const Ellipse &ellipse : ellipses)
 	{
-		if (!ellipse.removed)
+		drawEllipse(ellipse, cv::Scalar(0, 0, 0), 4);
+		if (!ellipse.falsePositive)
 		{
-			drawEllipse(ellipse, cv::Scalar(0, 0, 0), 4);
-		}
-	}
-	cv::Mat img = gFrame.clone();
-	if (countFalsePositives > 0)
-	{
-		for (const Ellipse &ellipse : ellipses)
-		{
-			if (ellipse.removed)
-			{
-				drawEllipse(ellipse, cv::Scalar(0, 0, 255), 2);
-			}
-			else
-			{
-				drawEllipse(ellipse, cv::Scalar(255, 255, 255), 2);
-			}
-		}
-		// Display image
-		cv::imshow(gEdgeWindowName + "_false positives", gFrame);
-	}
-	// Display image without false circles 
-	gFrame = img;
-	for (const Ellipse &ellipse : ellipses)
-	{
-		if (!ellipse.removed)
-		{
+			
 			drawEllipse(ellipse, cv::Scalar(0, 255, 0), 2);
+		}
+		else
+		{
+			drawEllipse(ellipse, cv::Scalar(0, 0, 255), 2);
 		}
 	}
 	cv::imshow(gEdgeWindowName, gFrame);

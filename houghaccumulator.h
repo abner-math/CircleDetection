@@ -9,7 +9,7 @@
 struct Ellipse
 {
 	cv::RotatedRect ellipse;
-	bool removed;
+	bool falsePositive;
 };
 
 struct Intersection

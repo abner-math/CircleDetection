@@ -64,7 +64,7 @@ std::pair<size_t, size_t> Sampler::sample()
 	#ifdef _BENCHMARK
 		auto begin = std::chrono::high_resolution_clock::now();
 	#endif 
-	size_t maxNumSamples = 360 / mPointCloud.numAngles();
+	size_t maxNumSamples = 360 / mPointCloud.numAngles() * 100;
 	p.first = selectRandomPoint();
 	if (++mNumPicksPerPoint[p.first] > mPointCloud.point(p.first).count * maxNumSamples)
 	{
@@ -137,7 +137,7 @@ size_t Sampler::selectRandomPoint()
 
 size_t Sampler::selectAnotherRandomPoint(size_t point)
 {
-	short angle = (short)(getRandomValueFromExponentialDist() * mPointCloud.numAngles() + angleIndex(point) + mPointCloud.numAngles() / 4) % mPointCloud.numAngles();
+	short angle = (short)(getRandomValueFromExponentialDist() * (mPointCloud.numAngles() / 2) + angleIndex(point) + mPointCloud.numAngles() / 4) % mPointCloud.numAngles();
 	size_t anotherPoint = selectRandomPointWithValidAngle(angle);
 	if (anotherPoint < numPoints()) return anotherPoint;
 	return selectRandomPoint();
