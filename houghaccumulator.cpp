@@ -42,7 +42,7 @@ bool HoughAccumulator::hasEllipseCandidate() const
 
 Ellipse HoughAccumulator::getEllipseCandidate()  
 {
-	mVisited = true;
+	//mVisited = true;
 	/*std::vector<float> xs, ys;
 	for (const Intersection &intersection : mIntersections)
 	{

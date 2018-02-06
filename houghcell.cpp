@@ -135,7 +135,7 @@ bool HoughCell::intersectionBetweenPoints(Sampler *sampler, const std::pair<size
 	// Check intersection ratio 
 	float dist1 = norm(a - position);
 	float dist2 = norm(c - position);
-	if (dist1 < std::numeric_limits<float>::epsilon() || dist2 < std::numeric_limits<float>::epsilon() || 
+	/*if (dist1 < std::numeric_limits<float>::epsilon() || dist2 < std::numeric_limits<float>::epsilon() || 
 		std::max(dist1, dist2) / std::min(dist1, dist2) > MAX_INTERSECTION_RATIO)
 	{
 		#ifdef _BENCHMARK
@@ -143,19 +143,19 @@ bool HoughCell::intersectionBetweenPoints(Sampler *sampler, const std::pair<size
 			gTimeIntersection += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
 		#endif 
 		return false; 
-	}
+	}*/
 	
 	// Check ratio between dist of points and intersection dist 
 	float dist = (dist1 + dist2) / 2;
-	float distPoints = norm(a - c);
-	if (std::max(dist, distPoints) / std::min(dist, distPoints) > 10 * MAX_INTERSECTION_RATIO)
+	/*float distPoints = norm(a - c);
+	if (std::max(dist, distPoints) / std::min(dist, distPoints) > MAX_INTERSECTION_RATIO)
 	{
 		#ifdef _BENCHMARK
 			auto end = std::chrono::high_resolution_clock::now();
 			gTimeIntersection += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
 		#endif 
 		return false; 
-	}
+	}*/
 	
 	intersection.sampler = sampler;
 	intersection.p1 = sample.first;
@@ -171,6 +171,8 @@ bool HoughCell::intersectionBetweenPoints(Sampler *sampler, const std::pair<size
 
 HoughAccumulator* HoughCell::accumulate(const Intersection &intersection)
 {
+	//intersection.sampler->removePoint(intersection.p1);
+	//intersection.sampler->removePoint(intersection.p2);
 	size_t radius = std::min(mNumAccumulators - 1, (size_t)(intersection.dist / mSize));
 	if (mAccumulators[radius] == NULL)
 	{

@@ -4,13 +4,17 @@
 #include "imageutils.h"
 #include "benchmark.hpp"
  
+class PointCloud;
+
 struct Point
 {
+	size_t index;
 	cv::Point2f position; 
 	cv::Point2f normal;
 	int angleIndex;
-	//float curvature;
-	//int count;
+	bool isGroup;
+	PointCloud *pointCloud;
+	size_t maxNumSamples;
 };
 
 class Sampler;
@@ -44,12 +48,12 @@ public:
 	
 	const Point& point(size_t index) const 
 	{
-		return mPoints[index];
+		return *mPoints[index];
 	}
 	
 	const Point& group(size_t index) const 
 	{
-		return mGroups[index];
+		return *mGroups[index];
 	}
 	
 	const cv::Rect2f& extension() const 
@@ -69,18 +73,22 @@ public:
 		return sEdgeImg;
 	}
 	
+	static std::vector<Point*>& points() 
+	{
+		return sPoints;
+	}
+	
 private:
 	static cv::Mat sEdgeImg;
-	std::vector<Point> mPoints;
-	std::vector<Point> mGroups;
+	static std::vector<Point*> sPoints;
+	std::vector<Point*> mPoints;
+	std::vector<Point*> mGroups;
 	short mNumAngles;
 	cv::Rect2f mExtension;
 	cv::Point2f mCenter;
 	Sampler *mSampler;
 				
 	PointCloud(int numAngles);
-	
-	void sortPointsByCurvature();
 	
 	void setExtension();
 	

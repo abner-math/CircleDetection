@@ -42,6 +42,8 @@ public:
 	
 	void removePoint(size_t point);
 	
+	void addPoint(size_t point);
+	
 	bool isRemoved(size_t point) const
 	{
 		return mPoints[point] != point;
@@ -60,6 +62,7 @@ private:
 	size_t *mNumPicksPerPoint;
 	size_t mNumEmptyAngles;
 	size_t mNumAvailablePoints;
+	size_t mCurrentAngle;
 	
 	short angleIndex(size_t point) const 
 	{

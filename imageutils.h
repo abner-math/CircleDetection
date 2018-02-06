@@ -62,8 +62,6 @@ public:
 		return ((float*)mSobelAngle.data)[edgeIndex];
 	}
 	
-	float curvature(int edgeIndex);
-	
 	int createConnectedComponents();
 	
 	int labelOf(int edgeIndex)
@@ -88,6 +86,11 @@ public:
 		return mGroups[edgeIndex];
 	}
 	
+	int numPointsInGroup(int edgeIndex)
+	{
+		return mCountInGroup[edgeIndex];
+	}
+	
 private:
 	cv::Mat mImg;
 	cv::Mat mEdges;
@@ -104,6 +107,7 @@ private:
 	short *mAngleIndices;
 	std::vector<cv::Point2f> mCenters;
 	int *mGroups;
+	int *mCountInGroup;
 
 	void createEdgeIndices();
 	

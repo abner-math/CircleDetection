@@ -2,17 +2,22 @@
 
 #include <iostream>
 
+#include "ED.h"
+
 ImageUtils::ImageUtils(const cv::Mat &img, short numAngles, int cannyLowThreshold, int cannyRatio, int cannyKernelSize)
 	: mNumAngles(numAngles)
-	, mEdgeIndices(new int[img.total()])
+	, mEdgeIndices(NULL)
 	, mNeighborAngles(NULL)
 	, mLabels(NULL)
 	, mAngleIndices(NULL)
 	, mGroups(NULL)
+	, mCountInGroup(NULL)
 {	
-	cv::GaussianBlur(img, mImg, cv::Size(5, 5), 0, 0);
-	cv::Canny(mImg, mEdges, cannyLowThreshold, cannyLowThreshold * cannyRatio, cannyKernelSize);
+	//EdgeMap *edgeMap = DetectEdgesByEDPF(img.data, img.cols, img.rows);
+	//mEdges = cv::Mat(img.size(), CV_8U, edgeMap->edgeImg);
+	cv::Canny(img, mEdges, cannyLowThreshold, cannyLowThreshold * cannyRatio, cannyKernelSize);
 	createEdgeIndices();
+	cv::GaussianBlur(img, mImg, cv::Size(3, 3), 0, 0);
 	createNormals();
 }
 
@@ -28,12 +33,15 @@ ImageUtils::~ImageUtils()
 		delete[] mAngleIndices;
 	if (mGroups != NULL)
 		delete[] mGroups;
+	if (mCountInGroup != NULL)
+		delete[] mCountInGroup;
 }
 
 void ImageUtils::createEdgeIndices()
 {
 	mNumEdges = 0;
-	for (int index = 0; index < mImg.total(); index++)
+	mEdgeIndices = new int[mEdges.total()];
+	for (int index = 0; index < mEdges.total(); index++)
 	{
 		if (mEdges.data[index] > 0)
 		{
@@ -46,7 +54,7 @@ void ImageUtils::createEdgeIndices()
 		}
 	}
 	mReverseEdgeIndices = new int[mNumEdges];
-	for (int index = 0; index < mImg.total(); index++)
+	for (int index = 0; index < mEdges.total(); index++)
 	{
 		if (mEdgeIndices[index] != -1)
 		{
@@ -73,21 +81,13 @@ void ImageUtils::createNormals()
 	cv::phase(mSobelX, mSobelY, mSobelAngle, true);
 }
 
-float ImageUtils::curvature(int edgeIndex)  
+void ImageUtils::calculateAngleIndices()
 {
-	float sum = 0;
-	int count = 0; ;
-	for (int i = 0; i < 8; i++)
+	mAngleIndices = new short[mNumEdges];
+	for (int edgeIndex = 0; edgeIndex < mNumEdges; edgeIndex++)
 	{
-		float angle = mNeighborAngles[edgeIndex * 8 + i];
-		if (!std::isinf(angle))
-		{
-			sum += angle;
-			++count;
-		}
+		mAngleIndices[edgeIndex] = (short)(std::round(normalAngle(edgeIndex) / (360.0f / mNumAngles))) % mNumAngles;
 	}
-	if (count == 0) return 0;
-	return sum / count;
 }
 
 void ImageUtils::calculateNeighborAngles()
@@ -119,61 +119,6 @@ void ImageUtils::calculateNeighborAngles()
 	}
 }
 	
-int ImageUtils::createConnectedComponents()
-{
-	calculateAngleIndices();
-	calculateNeighborAngles();
-	std::queue<int> queue;
-	bool *marked = (bool*)calloc(mNumEdges, sizeof(bool));
-	mLabels = new int[mNumEdges];
-	int numLabels = 0;
-	for (int edgeSeed = 0; edgeSeed < mNumEdges; edgeSeed++)
-	{
-		if (!marked[edgeSeed])
-		{
-			marked[edgeSeed] = true;
-			mLabels[edgeSeed] = numLabels;
-			queue.push(mReverseEdgeIndices[edgeSeed]);
-			float xs = 0;
-			float ys = 0;
-			int count = 0;
-			while (!queue.empty())
-			{
-				int index = queue.front();
-				queue.pop();
-				xs += index % mImg.cols;
-				ys += index / mImg.cols;
-				++count;
-				for (int i = 0; i < 8; i++)
-				{
-					int neighbor = neighborIndex(index, i);
-					int edgeNeighbor = mEdgeIndices[neighbor];
-					if (isEdge(neighbor) && !marked[edgeNeighbor] && mNeighborAngles[edgeNeighbor * 8 + 7 - i] < 6)
-					{
-						marked[edgeNeighbor] = true;
-						mLabels[edgeNeighbor] = numLabels;
-						queue.push(neighbor);
-					}
-				}
-			}
-			mCenters.push_back(cv::Point2f(xs / count, ys / count));
-			++numLabels;
-		}
-	}
-	delete[] marked;
-	reorientNormals();
-	return numLabels;
-}
-
-void ImageUtils::calculateAngleIndices()
-{
-	mAngleIndices = new short[mNumEdges];
-	for (int edgeIndex = 0; edgeIndex < mNumEdges; edgeIndex++)
-	{
-		mAngleIndices[edgeIndex] = (short)(std::round(normalAngle(edgeIndex) / (360.0f / mNumAngles))) % mNumAngles;
-	}
-}
-
 void ImageUtils::reorientNormals()
 {
 	for (int edgeSeed = 0; edgeSeed < mNumEdges; edgeSeed++)
@@ -193,14 +138,58 @@ void ImageUtils::reorientNormals()
 	
 }
 
+int ImageUtils::createConnectedComponents()
+{
+	calculateAngleIndices();
+	calculateNeighborAngles();
+	std::queue<int> queue;
+	bool *marked = (bool*)calloc(mNumEdges, sizeof(bool));
+	mLabels = new int[mNumEdges];
+	int numLabels = 0;
+	for (int edgeSeed = 0; edgeSeed < mNumEdges; edgeSeed++)
+	{
+		if (!marked[edgeSeed])
+		{
+			marked[edgeSeed] = true;
+			mLabels[edgeSeed] = numLabels;
+			queue.push(mReverseEdgeIndices[edgeSeed]);
+			while (!queue.empty())
+			{
+				int index = queue.front();
+				queue.pop();
+				//int x = index % mImg.cols;
+				//int y = index / mImg.cols;
+				for (int i = 0; i < 8; i++)
+				{
+					int neighbor = neighborIndex(index, i);
+					int edgeNeighbor = mEdgeIndices[neighbor];
+					if (isEdge(neighbor) && !marked[edgeNeighbor] && mNeighborAngles[edgeNeighbor * 8 + 7 - i] < 6)
+					{
+						marked[edgeNeighbor] = true;
+						mLabels[edgeNeighbor] = numLabels;
+						queue.push(neighbor);
+					}
+				}
+			}
+			//mCenters.push_back(cv::Point2f((maxX + minX) / 2, (maxY + minY) / 2));
+			++numLabels;
+		}
+	}
+	delete[] marked;
+	//reorientNormals();
+	return numLabels;
+}
+
 int ImageUtils::groupPointsByAngle()
 {
 	mGroups = new int[mNumEdges];
 	bool *marked = (bool*)calloc(mNumEdges, sizeof(bool));
+	mCountInGroup = (int*)calloc(mNumEdges, sizeof(int));
 	int numGroups = 0;
 	std::queue<int> queue;
 	for (int edgeSeed = 0; edgeSeed < mNumEdges; edgeSeed++)
 	{
+		int count = 0;
 		if (!marked[edgeSeed])
 		{
 			marked[edgeSeed] = true;
@@ -210,6 +199,7 @@ int ImageUtils::groupPointsByAngle()
 			{
 				int index = queue.front();
 				queue.pop();
+				++mCountInGroup[edgeSeed];
 				for (int i = 0; i < 8; i++)
 				{
 					int neighbor = neighborIndex(index, i);
@@ -230,3 +220,24 @@ int ImageUtils::groupPointsByAngle()
 	delete[] marked;
 	return numGroups;
 }
+
+/*
+float ImageUtils::curvature(int edgeIndex)
+{
+	int index = mReverseEdgeIndices[edgeIndex];
+	float sum = 0;
+	int count = 0;
+	for (int i = 0; i < 8; i++)
+	{
+		int neighbor = neighborIndex(index, i);
+		if (isEdge(neighbor))
+		{
+			int edgeNeighbor = mEdgeIndices[neighbor];
+			sum += mNeighborAngles[edgeNeighbor * 8 + 7 - i];
+			++count;
+		}
+	}
+	if (count == 0) return 0;
+	return sum / count;
+}
+	*/

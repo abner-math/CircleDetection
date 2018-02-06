@@ -187,104 +187,105 @@ void displayInteractiveFrame(const std::vector<PointCloud> &pointClouds, const H
 }
 #endif 
 
-bool ellipseIntersectsRect(const Ellipse &ellipse, const cv::Rect2f &rect)
+cv::Rect2i getEllipseBoundingRect(const cv::Mat &edgeImg, const Ellipse &ellipse, int strokeSize)
 {
-	cv::Rect2f boundingBox = ellipse.ellipse.boundingRect2f();
-	cv::Point2f boundingBoxCorners[4] = {
-		cv::Point2f(boundingBox.x, boundingBox.y),
-		cv::Point2f(boundingBox.x, boundingBox.y + boundingBox.height),
-		cv::Point2f(boundingBox.x + boundingBox.width, boundingBox.y),
-		cv::Point2f(boundingBox.x + boundingBox.width, boundingBox.y + boundingBox.height)
-	};
-	cv::Point2f rectCorners[4] = {
-		cv::Point2f(rect.x, rect.y),
-		cv::Point2f(rect.x, rect.y + rect.height),
-		cv::Point2f(rect.x + rect.width, rect.y),
-		cv::Point2f(rect.x + rect.width, rect.y + rect.height)
-	};
-	for (size_t i = 0; i < 4; i++)
-	{
-		if (rect.contains(boundingBoxCorners[i]) || boundingBox.contains(rectCorners[i]))
-			return true;
-	}
-	return false;
+	cv::Rect2i boundingRect = ellipse.ellipse.boundingRect();
+	return boundingRect & cv::Rect(0, 0, edgeImg.cols, edgeImg.rows);
 }
 
-cv::Point2f closestPointInRect(const cv::Rect2f &rect, const cv::Point2f &point)
+cv::RotatedRect getCenteredEllipse(const cv::Rect2i &boundingRect, const Ellipse &ellipse)
 {
-	float closestX, closestY;
-	if (point.x < rect.x)
-	{
-		closestX = rect.x;
-	}
-	else if (point.x > rect.x + rect.width)
-	{
-		closestX = rect.x + rect.width;
-	}
-	else 
-	{
-		closestX = point.x;
-	}
-	if (point.y < rect.y)
-	{
-		closestY = rect.y;
-	}
-	else if (point.y > rect.y + rect.height)
-	{
-		closestY = rect.y + rect.height;
-	}
-	else
-	{
-		closestY = point.y;
-	}
-	return cv::Point2f(closestX, closestY);
+	cv::Point2i newCenter(boundingRect.width / 2, boundingRect.height / 2);
+	cv::RotatedRect newEllipse(newCenter, ellipse.ellipse.size, ellipse.ellipse.angle);
+	return newEllipse;
 }
 
-void removeEllipsePoints(const HoughCell *cell, const Ellipse &ellipse, const std::vector<PointCloud> &pointClouds)
+size_t removeEllipsePoints(const HoughCell *cell, const Ellipse &ellipse, const std::vector<PointCloud> &pointClouds)
 {
-	cv::Mat img = cv::Mat::zeros(gImg.size(), CV_8U);
-	cv::ellipse(img, ellipse.ellipse, cv::Scalar(255, 255, 255), 1);
-	std::vector<std::vector<cv::Point> > contours; 
-	std::vector<cv::Vec4i> hierarchy;
-	cv::findContours(img, contours, hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_SIMPLE);
-	if (!contours.empty())
+	cv::Mat edgeImg = PointCloud::edgeImg();
+	cv::Rect2i boundingRect = getEllipseBoundingRect(edgeImg, ellipse, (int)cell->size());
+	cv::Mat croppedEdgeImg = edgeImg(boundingRect);
+	cv::Mat referenceImg = cv::Mat::zeros(boundingRect.size(), CV_8U);
+	cv::RotatedRect newEllipse = getCenteredEllipse(boundingRect, ellipse);
+	cv::ellipse(referenceImg, newEllipse, cv::Scalar(255, 255, 255), std::max((int)std::min(ellipse.ellipse.size.width, ellipse.ellipse.size.height) / 10, (int)cell->size()));
+	cv::Mat toBeRemoved = referenceImg & croppedEdgeImg;
+	size_t count = 0;
+	int index = 0;
+	for (int y = 0; y < toBeRemoved.rows; y++)
 	{
-		for (const PointCloud &pointCloud : pointClouds)
+		for (int x = 0; x < toBeRemoved.cols; x++)
 		{
-			if (ellipseIntersectsRect(ellipse, pointCloud.extension()) || norm(closestPointInRect(pointCloud.extension(), ellipse.ellipse.center) - ellipse.ellipse.center) < cell->size())
+			if (toBeRemoved.data[index])
 			{
-				Sampler *sampler = pointCloud.sampler();
-				for (size_t i = 0; i < sampler->numPoints(); i++)
+				int x_ = x + boundingRect.x;
+				int y_ = y + boundingRect.y;
+				int index_ = y_ * edgeImg.cols + x_;
+				Point *point = PointCloud::points()[index_];
+				if (point != NULL && point->pointCloud != NULL && point->isGroup && !point->pointCloud->sampler()->isRemoved(point->index))
 				{
-					if (!sampler->isRemoved(i) && std::abs(cv::pointPolygonTest(contours[0], pointCloud.group(i).position, true)) < cell->size())
-					{
-						sampler->removePoint(i);
-					}
+					point->pointCloud->sampler()->removePoint(point->index);
+					++count;
 				}
 			}
+			++index;
 		}
 	}
+	return count;
+}
+
+void adjustEllipse(const HoughCell *cell, Ellipse &ellipse, const std::vector<PointCloud> &pointClouds)
+{
+	cv::Mat edgeImg = PointCloud::edgeImg();
+	cv::Rect2i boundingRect = getEllipseBoundingRect(edgeImg, ellipse, (int)cell->size());
+	cv::Mat croppedEdgeImg = edgeImg(boundingRect);
+	cv::Mat referenceImg = cv::Mat::zeros(boundingRect.size(), CV_8U);
+	cv::RotatedRect newEllipse = getCenteredEllipse(boundingRect, ellipse);
+	cv::ellipse(referenceImg, newEllipse, cv::Scalar(255, 255, 255), (int)cell->size());
+	cv::Mat toBeRemoved = referenceImg & croppedEdgeImg;
+	std::vector<cv::Point2f> inliers;
+	int index = 0;
+	for (int y = 0; y < toBeRemoved.rows; y++)
+	{
+		for (int x = 0; x < toBeRemoved.cols; x++)
+		{
+			if (toBeRemoved.data[index])
+			{
+				int x_ = x + boundingRect.x;
+				int y_ = y + boundingRect.y;
+				int index_ = y_ * edgeImg.cols + x_;
+				Point *point = PointCloud::points()[index_];
+				if (point != NULL && point->pointCloud != NULL)
+				{
+					inliers.push_back(point->position);
+				}
+			}
+			++index;
+		}
+	}
+	ellipse.ellipse = cv::fitEllipse(inliers);
 }
 
 bool isFalsePositive(Ellipse &ellipse)
 {
 	cv::Mat edgeImg = PointCloud::edgeImg();
-	cv::Mat referenceImg = cv::Mat::zeros(gFrame.size(), CV_8U);
-	cv::ellipse(referenceImg, ellipse.ellipse, cv::Scalar(255, 255, 255), 2);
+	cv::Rect2i boundingRect = getEllipseBoundingRect(edgeImg, ellipse, 4);
+	float a = ellipse.ellipse.size.width / 2;    
+	float b = ellipse.ellipse.size.height / 2;
+	float eccentricity = std::sqrt(1 - (a * a) / (b * b));
+	if (eccentricity > 0.75f) return true;
+	if (std::max(boundingRect.width, boundingRect.height) / (float)std::min(boundingRect.width, boundingRect.height) > 2) return false;
+	cv::Mat croppedEdgeImg = edgeImg(boundingRect);
+	cv::Mat referenceImg = cv::Mat::zeros(boundingRect.size(), CV_8U);
+	cv::RotatedRect newEllipse = getCenteredEllipse(boundingRect, ellipse);
+	cv::ellipse(referenceImg, newEllipse, cv::Scalar(255, 255, 255), 2);
 	std::vector<std::vector<cv::Point> > contours; 
 	std::vector<cv::Vec4i> hierarchy;
 	cv::findContours(referenceImg, contours, hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_SIMPLE);
-	if (contours.empty())
-	{
-		return true;
-	}
-	else
-	{
-		double perimeter = cv::arcLength(contours[0], true);
-		cv::Mat resultImg = referenceImg & edgeImg;
-		double value = cv::sum(resultImg)[0] / 255.0 / perimeter;
-		return value < 0.25f;
-	}
+	if (contours.size() < 2) return true;
+	double perimeter = (cv::arcLength(contours[0], true) + cv::arcLength(contours[1], true)) / 2;
+	cv::Mat resultImg = referenceImg & croppedEdgeImg;
+	double value = cv::sum(resultImg)[0] / 255.0 / perimeter;
+	return value < 0.5f;
 }
 
 void findEllipses(HoughCell *cell, const std::vector<PointCloud> &pointClouds, std::vector<Ellipse> &ellipses);
@@ -302,7 +303,7 @@ void subdivide(HoughCell *parentCell, HoughAccumulator *accumulator, const std::
 			#endif
 			subdivide(parentCell, childAccumulator, pointClouds, ellipses);
 		}
-		findEllipses(parentCell, pointClouds, ellipses);
+		//findEllipses(parentCell, pointClouds, ellipses);
 	}        
 	else
 	{
@@ -323,16 +324,33 @@ void subdivide(HoughCell *parentCell, HoughAccumulator *accumulator, const std::
 		#endif
 		if (!ellipse.falsePositive)
 		{
+			//adjustEllipse(cell, ellipse, pointClouds);
 			removeEllipsePoints(cell, ellipse, pointClouds);
 			#ifdef _BENCHMARK
 				end = std::chrono::high_resolution_clock::now();
 				gTimeRemoveEllipsePoints += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
 			#endif
+			ellipses.push_back(ellipse);
+			#ifdef _DEBUG_INTERACTIVE
+				displayInteractiveFrame(pointClouds, parentCell, accumulator, ellipses);
+			#endif
 		}
-		ellipses.push_back(ellipse);
-		#ifdef _DEBUG_INTERACTIVE
-			displayInteractiveFrame(pointClouds, parentCell, accumulator, ellipses);
-		#endif
+		//else
+		//{
+			//for (const Intersection &intersection : accumulator->intersections())
+			//{
+				//intersection.sampler->addPoint(intersection.p1);
+			//	intersection.sampler->addPoint(intersection.p2);
+			//}
+			/*for (HoughAccumulator *childAccumulator : cell->addIntersectionsToChildren())
+			{
+				#ifdef _DEBUG_INTERACTIVE
+					displayInteractiveFrame(pointClouds, parentCell, accumulator, ellipses);
+				#endif
+				subdivide(parentCell, childAccumulator, pointClouds, ellipses);
+			}
+			findEllipses(parentCell, pointClouds, ellipses);*/
+		//}	
 	}
 }
  
@@ -472,15 +490,14 @@ void cannyCallback(int slider, void *userData)
 	// Draw ellipses  
 	for (const Ellipse &ellipse : ellipses)
 	{
-		drawEllipse(ellipse, cv::Scalar(0, 0, 0), 4);
+		//drawEllipse(ellipse, cv::Scalar(0, 0, 0), 4);
 		if (!ellipse.falsePositive)
 		{
-			
 			drawEllipse(ellipse, cv::Scalar(0, 255, 0), 2);
 		}
 		else
 		{
-			drawEllipse(ellipse, cv::Scalar(0, 0, 255), 2);
+			//drawEllipse(ellipse, cv::Scalar(0, 0, 255), 2);
 		}
 	}
 	cv::imshow(gEdgeWindowName, gFrame);
@@ -528,8 +545,8 @@ int main(int argc, char **argv)
 		return -1;
 	}
 	cv::namedWindow(gEdgeWindowName, CV_WINDOW_AUTOSIZE);
-	cv::createTrackbar("Min threshold:", gEdgeWindowName, &gCannyLowThreshold, 100, cannyCallback);
-	cv::createTrackbar("Max depth:", gEdgeWindowName, &gMaxDepth, 15, cannyCallback);
+	//cv::createTrackbar("Min threshold:", gEdgeWindowName, &gCannyLowThreshold, 100, cannyCallback);
+	//cv::createTrackbar("Max depth:", gEdgeWindowName, &gMaxDepth, 15, cannyCallback);
 	cannyCallback(gCannyLowThreshold, NULL);
 	//cv::imshow("Original image", gImg);
 	cv::waitKey(0);
