@@ -333,7 +333,9 @@ void findEllipses(HoughCell *cell, const std::vector<PointCloud> &pointClouds, s
 	for (const PointCloud &pointCloud : pointClouds)
 	{
 		Sampler *sampler = pointCloud.sampler();
-		while (sampler->canSample())
+		size_t maxNumSamples = sampler->numAvailablePoints() * (360 / pointCloud.numAngles());
+		size_t currentSample = 0;
+		while (sampler->canSample() && currentSample < maxNumSamples)
 		{
 			HoughAccumulator *accumulator = cell->addIntersection(sampler);
 			if (accumulator != NULL)
@@ -346,6 +348,8 @@ void findEllipses(HoughCell *cell, const std::vector<PointCloud> &pointClouds, s
 					subdivide(cell, accumulator, pointClouds, ellipses);
 				}
 			}
+			++currentSample;
+			maxNumSamples = sampler->numAvailablePoints() * (360 / pointCloud.numAngles());
 		}
 	}
 } 

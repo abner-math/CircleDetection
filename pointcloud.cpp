@@ -62,7 +62,7 @@ cv::Rect2f PointCloud::createPointCloudsFromImage(const cv::Mat &img, int cannyL
 			sPoints[reverseIndex] = point;
 			pointClouds[label].mPoints.push_back(point);
 		}
-		point->pointCloud = &pointClouds[label];
+		point->pointCloud = &pointClouds[label]; 
 	}
 	int anglesPerIndex = 360 / numAngles;
 	for (int i = 0; i < numConnectedComponents; i++)

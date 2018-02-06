@@ -79,7 +79,7 @@ private:
 	size_t getValidPoint(size_t index);
 	
 	size_t selectRandomPointFromAngle(short angle);
-	
+	 
 	size_t selectRandomPoint();
 	
 	size_t selectAnotherRandomPoint(size_t point);

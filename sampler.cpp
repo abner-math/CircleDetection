@@ -10,7 +10,7 @@ Sampler::Sampler(const PointCloud &pointCloud, short minNumAngles)
 	: mPointCloud(pointCloud)
 	, mPoints(NULL)
 	, mMinNumAngles(minNumAngles)
-	, mNumAvailablePoints(0)
+	, mNumAvailablePoints(0) 
 {  
 	if (numPoints() >= mMinNumAngles)
 	{

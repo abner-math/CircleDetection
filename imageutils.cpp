@@ -29,7 +29,7 @@ ImageUtils::~ImageUtils()
 	if (mNeighborAngles != NULL) 
 		delete[] mNeighborAngles;
 	if (mLabels != NULL)
-		delete[] mLabels;
+		delete[] mLabels; 
 	if (mAngleIndices != NULL)
 		delete[] mAngleIndices;
 	if (mGroups != NULL)
