@@ -19,6 +19,7 @@ struct Intersection
 	size_t p2;
 	cv::Point2f position;
 	float dist;
+	float distFromCenter;
 	
 	bool operator<(const Intersection &other) const 
 	{

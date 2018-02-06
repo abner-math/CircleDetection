@@ -44,40 +44,40 @@ cv::Rect2f PointCloud::createPointCloudsFromImage(const cv::Mat &img, int cannyL
 	for (int edgeIndex = 0; edgeIndex < imgUtils.numEdges(); edgeIndex++)
 	{
 		Point *point = new Point;
-		point->position = imgUtils.position(edgeIndex);
+		size_t reverseIndex = imgUtils.reverseIndexOf(edgeIndex);
+		point->position = cv::Point2f(reverseIndex % img.cols, reverseIndex / img.cols);
 		point->normal = imgUtils.normal(edgeIndex);
 		point->angleIndex = imgUtils.angleIndexOf(edgeIndex);
 		int label = imgUtils.labelOf(edgeIndex);
-		point->pointCloud = &pointClouds[label];
 		int group = imgUtils.groupOf(edgeIndex); 
 		point->isGroup = group == edgeIndex;
 		if (point->isGroup)
 		{
-			point->index = pointClouds[label].mGroups.size();
-			point->maxNumSamples = imgUtils.numPointsInGroup(edgeIndex);
-			sPoints[imgUtils.reverseIndexOf(edgeIndex)] = point;
+			sPoints[reverseIndex] = point;
 			pointClouds[label].mGroups.push_back(point);
 			pointClouds[label].mPoints.push_back(point);
 		}
 		else
 		{
-			point->index = pointClouds[label].mPoints.size();
-			sPoints[imgUtils.reverseIndexOf(edgeIndex)] = point;
+			sPoints[reverseIndex] = point;
 			pointClouds[label].mPoints.push_back(point);
 		}
+		point->pointCloud = &pointClouds[label];
 	}
 	int anglesPerIndex = 360 / numAngles;
 	for (int i = 0; i < numConnectedComponents; i++)
 	{
 		//pointClouds[i].mCenter = imgUtils.center(i);
 		pointClouds[i].setExtension();
-		for (Point *point : pointClouds[i].mGroups)
+		std::sort(pointClouds[i].mGroups.begin(), pointClouds[i].mGroups.end(), [](const Point *a, const Point *b)
 		{
-			point->maxNumSamples = point->maxNumSamples * anglesPerIndex * 10;
+			return a->angleIndex < b->angleIndex;
+		});
+		for (size_t j = 0; j < pointClouds[i].mGroups.size(); j++)
+		{
+			pointClouds[i].mGroups[j]->index = j;
 		}
 	}
-	//360 / mPointCloud.numAngles()
-	
 	cv::Rect extension = getExtension(pointClouds);
 	#ifdef _BENCHMARK
 		end = std::chrono::high_resolution_clock::now();

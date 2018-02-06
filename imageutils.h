@@ -57,9 +57,9 @@ public:
 		return cv::Point2f(((float*)mSobelX.data)[edgeIndex], ((float*)mSobelY.data)[edgeIndex]);
 	}
 	
-	float normalAngle(int edgeIndex) const 
+	short normalAngle(int edgeIndex) const 
 	{
-		return ((float*)mSobelAngle.data)[edgeIndex];
+		return static_cast<short>(((float*)mSobelAngle.data)[edgeIndex]);
 	}
 	
 	int createConnectedComponents();
@@ -67,11 +67,6 @@ public:
 	int labelOf(int edgeIndex)
 	{
 		return mLabels[edgeIndex];
-	}
-	
-	const cv::Point2f& center(int label)
-	{
-		return mCenters[label];
 	}
 	
 	int groupPointsByAngle();
@@ -86,11 +81,6 @@ public:
 		return mGroups[edgeIndex];
 	}
 	
-	int numPointsInGroup(int edgeIndex)
-	{
-		return mCountInGroup[edgeIndex];
-	}
-	
 private:
 	cv::Mat mImg;
 	cv::Mat mEdges;
@@ -98,31 +88,23 @@ private:
 	cv::Mat mSobelY;
 	cv::Mat mSobelNorm;
 	cv::Mat mSobelAngle;
-	int mNumAngles;
+	short mNumAngles;
 	int mNumEdges;
 	int *mEdgeIndices;
 	int *mReverseEdgeIndices;
-	float *mNeighborAngles;
+	short *mNeighborAngles;
 	int *mLabels;
 	short *mAngleIndices;
-	std::vector<cv::Point2f> mCenters;
 	int *mGroups;
-	int *mCountInGroup;
 
 	void createEdgeIndices();
 	
 	void createNormals();
 	
-	float angleBetween(int a, int b) const 
+	short angleBetween(int a, int b) const 
 	{
-		int angle1 = mAngleIndices[a];
-		int angle2 = mAngleIndices[b];
-		if (angle1 > mNumAngles / 2)
-			angle1 -= mNumAngles / 2;
-		if (angle2 > mNumAngles / 2)
-			angle2 -= mNumAngles /2 ;
-		int diff = std::abs(angle1 - angle2);
-		return std::min(diff, mNumAngles / 2 - diff);
+		short diff = std::abs((normalAngle(a) % 180) - (normalAngle(b) % 180));
+		return std::min(diff, (short)(180 - diff));
 		//return std::acos(std::abs(normal(a).dot(normal(b)))) * 180.0f / M_PI;
 	}
 	
@@ -152,8 +134,6 @@ private:
 	}
 	
 	void calculateNeighborAngles();
-	
-	void reorientNormals();
 	
 	void calculateAngleIndices();
 	

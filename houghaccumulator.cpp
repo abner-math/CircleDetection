@@ -3,7 +3,10 @@
 #include <iostream>
 
 #include "houghcell.h"
+#include "EllipseFit.h"
 
+using namespace cv;
+using namespace std;
 HoughAccumulator::HoughAccumulator(HoughCell *cell, float radius)
 	: mCell(cell)
 	, mRadius(radius)
@@ -42,47 +45,8 @@ bool HoughAccumulator::hasEllipseCandidate() const
 
 Ellipse HoughAccumulator::getEllipseCandidate()  
 {
-	//mVisited = true;
-	/*std::vector<float> xs, ys;
-	for (const Intersection &intersection : mIntersections)
-	{
-		xs.push_back(intersection.position.x);
-		ys.push_back(intersection.position.y);
-	}
-	size_t median = mIntersections.size() / 2;
-	// center = median of positions 
-	std::nth_element(xs.begin(), xs.begin() + median, xs.end());
-	std::nth_element(ys.begin(), ys.begin() + median, ys.end());
-	cv::Point2f center(xs[median], ys[median]);
-	// sort intersections by dist from center 
-	std::vector<Intersection> newIntersections(mIntersections.begin(), mIntersections.end());
-	for (Intersection &intersection : newIntersections)
-	{
-		intersection.dist = norm(intersection.position - center);
-	}
-	std::sort(newIntersections.begin(), newIntersections.end(), [](const Intersection &a, const Intersection &b)
-	{
-		return a.dist < b.dist;
-	});*/
-	// least squares with only first half of intersections
-	/*Eigen::Matrix2Xf points(2, newIntersections.size() / 2 * 2);
-	int col = 0;
-	for (int i = 0; i < newIntersections.size() / 2; i++)
-	{
-		cv::Point2f p1 = newIntersections[i].sampler->pointCloud().group(newIntersections[i].p1).position;
-		cv::Point2f p2 = newIntersections[i].sampler->pointCloud().group(newIntersections[i].p2).position;
-		points.col(col++) = Eigen::Vector2f(p1.x, p1.y);
-		points.col(col++) = Eigen::Vector2f(p2.x, p2.y);
-	}
-	Eigen::VectorXf params(3);
-	params << center.x, center.y, newRadius;
-	EllipseFunctor functor(points);
-	Eigen::LevenbergMarquardt<EllipseFunctor, float> lm(functor);
-	lm.minimize(params);
-	Ellipse circle;
-	circle.center = cv::Point2f(params(0), params(1));
-	circle.radius = std::abs(params(2));*/
-	std::vector<cv::Point2f> points;
+	mVisited = true;
+	/*std::vector<cv::Point2f> points;
 	for (size_t i = 0; i < mIntersections.size(); i++)
 	{
 		cv::Point2f p1 = mIntersections[i].sampler->pointCloud().group(mIntersections[i].p1).position;
@@ -91,7 +55,33 @@ Ellipse HoughAccumulator::getEllipseCandidate()
 		points.push_back(p2);
 	}
 	Ellipse ellipse;
-	ellipse.ellipse = cv::fitEllipse(points);
+	ellipse.ellipse = cv::fitEllipse(points);*/
+	double *xs = new double[mIntersections.size() * 2];
+	double *ys = new double[mIntersections.size() * 2];
+	for (size_t i = 0; i < mIntersections.size(); i++)
+	{
+		cv::Point2f p1 = mIntersections[i].sampler->pointCloud().group(mIntersections[i].p1).position;
+		cv::Point2f p2 = mIntersections[i].sampler->pointCloud().group(mIntersections[i].p2).position;
+		xs[i * 2] = p1.x;
+		xs[i * 2 + 1] = p2.x;
+		ys[i * 2] = p1.y;
+		ys[i * 2 + 1] = p2.y; 
+	}
+	Ellipse ellipse;
+	ellipse.falsePositive = true;
+	EllipseEquation equation;
+	if (EllipseFit(xs, ys, mIntersections.size() * 2, &equation, BOOKSTEIN))
+	{
+		ellipse.falsePositive = false;
+		double centerX, centerY, majorAxisLength, minorAxisLength;
+		ComputeEllipseCenterAndAxisLengths(&equation, &centerX, &centerY, &majorAxisLength, &minorAxisLength);
+		float rotationAngle = (float)std::atan(equation.B() / (equation.A() - equation.C())) / 2 * 180 / M_PI;
+		cv::Point2f center((float)centerX, (float)centerY);
+		cv::Size2f size((float)minorAxisLength * 2, (float)majorAxisLength * 2);
+		ellipse.ellipse = cv::RotatedRect(center, size, rotationAngle);
+	}
+	delete[] xs;
+	delete[] ys;
 	return ellipse;
 }
 

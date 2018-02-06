@@ -147,8 +147,8 @@ bool HoughCell::intersectionBetweenPoints(Sampler *sampler, const std::pair<size
 	
 	// Check ratio between dist of points and intersection dist 
 	float dist = (dist1 + dist2) / 2;
-	/*float distPoints = norm(a - c);
-	if (std::max(dist, distPoints) / std::min(dist, distPoints) > MAX_INTERSECTION_RATIO)
+	float distPoints = norm(a - c);
+	/*if (std::max(dist, distPoints) / std::min(dist, distPoints) > MAX_INTERSECTION_RATIO)
 	{
 		#ifdef _BENCHMARK
 			auto end = std::chrono::high_resolution_clock::now();

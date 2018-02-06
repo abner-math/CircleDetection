@@ -12,8 +12,8 @@
 
 #include "houghcell.h" 
 
-#define NUM_ANGLES 72
-#define MIN_NUM_ANGLES 18 // 45 degrees 
+#define NUM_ANGLES 60
+#define MIN_NUM_ANGLES 15 // 45 degrees 
 
 std::string gEdgeWindowName = "Edge image";
 int gCannyLowThreshold;
@@ -221,52 +221,21 @@ size_t removeEllipsePoints(const HoughCell *cell, const Ellipse &ellipse, const 
 				int y_ = y + boundingRect.y;
 				int index_ = y_ * edgeImg.cols + x_;
 				Point *point = PointCloud::points()[index_];
-				if (point != NULL && point->pointCloud != NULL && point->isGroup && !point->pointCloud->sampler()->isRemoved(point->index))
+				if (point->isGroup && !point->pointCloud->sampler()->isRemoved(point->index))
 				{
 					point->pointCloud->sampler()->removePoint(point->index);
 					++count;
 				}
 			}
 			++index;
-		}
+		} 
 	}
 	return count;
 }
 
-void adjustEllipse(const HoughCell *cell, Ellipse &ellipse, const std::vector<PointCloud> &pointClouds)
-{
-	cv::Mat edgeImg = PointCloud::edgeImg();
-	cv::Rect2i boundingRect = getEllipseBoundingRect(edgeImg, ellipse, (int)cell->size());
-	cv::Mat croppedEdgeImg = edgeImg(boundingRect);
-	cv::Mat referenceImg = cv::Mat::zeros(boundingRect.size(), CV_8U);
-	cv::RotatedRect newEllipse = getCenteredEllipse(boundingRect, ellipse);
-	cv::ellipse(referenceImg, newEllipse, cv::Scalar(255, 255, 255), (int)cell->size());
-	cv::Mat toBeRemoved = referenceImg & croppedEdgeImg;
-	std::vector<cv::Point2f> inliers;
-	int index = 0;
-	for (int y = 0; y < toBeRemoved.rows; y++)
-	{
-		for (int x = 0; x < toBeRemoved.cols; x++)
-		{
-			if (toBeRemoved.data[index])
-			{
-				int x_ = x + boundingRect.x;
-				int y_ = y + boundingRect.y;
-				int index_ = y_ * edgeImg.cols + x_;
-				Point *point = PointCloud::points()[index_];
-				if (point != NULL && point->pointCloud != NULL)
-				{
-					inliers.push_back(point->position);
-				}
-			}
-			++index;
-		}
-	}
-	ellipse.ellipse = cv::fitEllipse(inliers);
-}
-
 bool isFalsePositive(Ellipse &ellipse)
 {
+	if (ellipse.falsePositive) return true;
 	cv::Mat edgeImg = PointCloud::edgeImg();
 	cv::Rect2i boundingRect = getEllipseBoundingRect(edgeImg, ellipse, 4);
 	float a = ellipse.ellipse.size.width / 2;    
@@ -335,8 +304,13 @@ void subdivide(HoughCell *parentCell, HoughAccumulator *accumulator, const std::
 				displayInteractiveFrame(pointClouds, parentCell, accumulator, ellipses);
 			#endif
 		}
-		//else
-		//{
+		else
+		{
+			#ifdef _DEBUG_INTERACTIVE
+				ellipses.push_back(ellipse);
+				displayInteractiveFrame(pointClouds, parentCell, accumulator, ellipses);
+				ellipses.erase(ellipses.begin() + ellipses.size() - 1);
+			#endif
 			//for (const Intersection &intersection : accumulator->intersections())
 			//{
 				//intersection.sampler->addPoint(intersection.p1);
@@ -350,7 +324,7 @@ void subdivide(HoughCell *parentCell, HoughAccumulator *accumulator, const std::
 				subdivide(parentCell, childAccumulator, pointClouds, ellipses);
 			}
 			findEllipses(parentCell, pointClouds, ellipses);*/
-		//}	
+		}	
 	}
 }
  

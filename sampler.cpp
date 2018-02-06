@@ -8,55 +8,55 @@ boost::variate_generator<boost::mt19937, boost::exponential_distribution<float> 
 	
 Sampler::Sampler(const PointCloud &pointCloud, short minNumAngles)
 	: mPointCloud(pointCloud)
+	, mPoints(NULL)
 	, mMinNumAngles(minNumAngles)
-	, mNumEmptyAngles(mPointCloud.numAngles())
-	, mNumAvailablePoints(numPoints())
-	, mCurrentAngle(0)
+	, mNumAvailablePoints(0)
 {  
-	mPoints = new size_t[numPoints()];
-	mNumPointsPerAngle = (size_t*)calloc(mPointCloud.numAngles(), sizeof(size_t));
-	mTotalNumPointsPerAngle = (size_t*)calloc(mPointCloud.numAngles(), sizeof(size_t));
-	mNumPicksPerPoint = new size_t[numPoints()];
-	for (size_t i = 0; i < numPoints(); i++)
+	if (numPoints() >= mMinNumAngles)
 	{
-		mPoints[i] = i;
-		mNumPicksPerPoint[i] = 0;
-		++mTotalNumPointsPerAngle[angleIndex(i)];
-		if (++mNumPointsPerAngle[angleIndex(i)] == 1)
-			--mNumEmptyAngles;
+		mPoints = new size_t[numPoints()];
+		std::iota(mPoints, mPoints + numPoints(), 0);
+		int lastAngle = angleIndex(0);
+		mStartingIndicesPerAngle[lastAngle] = 0;
+		mCurrentIndexInAngle[lastAngle] = 0;
+		size_t count = 0;
+		mAngles.push_back(lastAngle);
+		for (size_t i = 0; i < numPoints(); i++)
+		{
+			short angle = angleIndex(i);
+			if (angle != lastAngle)
+			{
+				mStartingIndicesPerAngle[angle] = i;
+				mCurrentIndexInAngle[angle] = 0;
+				mCountPointsPerAngle[lastAngle] = count;
+				count = 1;
+				lastAngle = angle;
+				mAngles.push_back(angle);
+			}
+			else
+			{
+				++count;
+			}
+		}
+		mCountPointsPerAngle[lastAngle] = count;
+		mCurrentAngle = mAngles.begin();
+		mNumAvailablePoints = numPoints();
+		mNumPicks = (size_t*)calloc(numPoints(), sizeof(size_t));
 	}
-	mPointsPerAngle = new size_t*[mPointCloud.numAngles()];
-	int *indices = (int*)calloc(mPointCloud.numAngles(), sizeof(int));
-	for (short i = 0; i < mPointCloud.numAngles(); i++)
-	{
-		mPointsPerAngle[i] = new size_t[mTotalNumPointsPerAngle[i]];
-	}
-	for (size_t i = 0; i < numPoints(); i++)
-	{
-		short angle = angleIndex(i);
-		mPointsPerAngle[angle][indices[angle]] = i;
-		++indices[angle];
-	}
-	delete[] indices;
 }
 
 Sampler::~Sampler()
 {
-	delete[] mPoints;
-	delete[] mNumPointsPerAngle;
-	delete[] mTotalNumPointsPerAngle;
-	delete[] mNumPicksPerPoint;
-	for (short i = 0; i < mPointCloud.numAngles(); i++)
+	if (mPoints != NULL)
 	{
-		delete[] mPointsPerAngle[i];
+		delete[] mPoints;
+		delete[] mNumPicks;
 	}
-	delete[] mPointsPerAngle;
 }
 
 bool Sampler::canSample() const 
 {
-	return mPointCloud.numGroups() > mMinNumAngles && mNumAvailablePoints > 2 * mMinNumAngles && 
-		(mPointCloud.numAngles() - mNumEmptyAngles) > mMinNumAngles;
+	return numAvailablePoints() >= mMinNumAngles && mAngles.size() >= mMinNumAngles;
 }
 
 std::pair<size_t, size_t> Sampler::sample()  
@@ -66,20 +66,18 @@ std::pair<size_t, size_t> Sampler::sample()
 		auto begin = std::chrono::high_resolution_clock::now();
 	#endif 
 	p.first = selectRandomPoint();
-	if (++mNumPicksPerPoint[p.first] > mPointCloud.point(p.first).maxNumSamples)
-	{
+	++mNumPicks[p.first];
+	if (mNumPicks[p.first] >= MAX_NUM_PICKS)
 		removePoint(p.first);
-	}
 	#ifdef _BENCHMARK
 		auto end = std::chrono::high_resolution_clock::now();
 		gTimeSample1 += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
 		begin = std::chrono::high_resolution_clock::now();
 	#endif 
 	p.second = selectAnotherRandomPoint(p.first);
-	if (++mNumPicksPerPoint[p.second] > mPointCloud.point(p.first).maxNumSamples)
-	{
+	++mNumPicks[p.second];
+	if (mNumPicks[p.second] >= MAX_NUM_PICKS)
 		removePoint(p.second);
-	}
 	#ifdef _BENCHMARK
 		end = std::chrono::high_resolution_clock::now();
 		gTimeSample2 += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
@@ -87,73 +85,48 @@ std::pair<size_t, size_t> Sampler::sample()
 	return p;
 }
 	
+size_t Sampler::getValidPoint(size_t point)  
+{
+	if (point == mPoints[point]) return point;
+	mPoints[point] = getValidPoint(mPoints[point]);
+	return mPoints[point];
+}
+
 void Sampler::removePoint(size_t point)
 {
-	if (isRemoved(point)) return;
-	mPoints[point] = getPoint(rand() % numPoints());
-	if (--mNumPointsPerAngle[angleIndex(point)] == 0)
-		++mNumEmptyAngles;
+	if (mPoints == NULL || isRemoved(point) || mNumAvailablePoints <= 1) return;
 	--mNumAvailablePoints;
-}
-
-void Sampler::addPoint(size_t point)
-{
-	if (!isRemoved(point)) return;
-	mPoints[point] = point;
-	if (mNumPointsPerAngle[angleIndex(point)]++ == 0)
-		--mNumEmptyAngles;
-	++mNumAvailablePoints;
-	mNumPicksPerPoint[point] = 0;
-}
-	
-size_t Sampler::getPoint(size_t index)  
-{
-	if (index == mPoints[index]) return index;
-	mPoints[index] = getPoint(mPoints[index]);
-	return mPoints[index];
-}
-
-size_t Sampler::selectRandomPointWithAngle(short angle) 
-{
-	size_t n = mTotalNumPointsPerAngle[angle];
-	if (n == 0) return std::numeric_limits<size_t>::max();
-	size_t point = (size_t)(rand() % n);
-	return getPoint(mPointsPerAngle[angle][point]);
-}
-
-size_t Sampler::selectRandomPointWithValidAngle(short angle) 
-{
-	size_t point = selectRandomPointWithAngle(angle);
-	if (point < numPoints()) return point;
-	short clockwiseAngle = angle;
-	short counterClockwiseAngle = angle;
-	for (short i = 0; i < mPointCloud.numAngles() / 2; i++)
+	size_t candidate1 = getValidPoint((point + 1) % numPoints());
+	size_t candidate2 = getValidPoint(point == 0 ? numPoints() - 1 : point - 1);
+	if (std::abs(candidate1 - point) < std::abs(candidate2 - point))
 	{
-		clockwiseAngle = increaseOneAngle(clockwiseAngle);
-		point = selectRandomPointWithAngle(clockwiseAngle);
-		if (point < numPoints()) return point;
-		counterClockwiseAngle = decreaseOneAngle(counterClockwiseAngle);
-		point = selectRandomPointWithAngle(counterClockwiseAngle);
-		if (point < numPoints()) return point;
+		mPoints[point] = candidate1;
 	}
-	return std::numeric_limits<size_t>::max();
+	else
+	{
+		mPoints[point] = candidate2;
+	}
+}
+
+size_t Sampler::selectRandomPointFromAngle(short angle) 
+{
+	size_t index = rand() % mCountPointsPerAngle[angle];
+	return getValidPoint(mPoints[mStartingIndicesPerAngle[angle] + index]);
 }
 
 size_t Sampler::selectRandomPoint()  
 {
-	//size_t point = (mLastPoint + (size_t)(numPoints() - getRandomValueFromExponentialDist() * numPoints() / 2)) % numPoints();
-	//mLastPoint = getPoint(point);
-	//return mLastPoint;
-	//size_t point = (size_t)(rand() % numPoints());
-	//return getPoint(point);
-	size_t point = selectRandomPointWithValidAngle(mCurrentAngle);
-	++mCurrentAngle;
+	size_t point = selectRandomPointFromAngle(*mCurrentAngle);
+	if (++mCurrentAngle == mAngles.end())
+		mCurrentAngle = mAngles.begin();
 	return point;
 }
 
 size_t Sampler::selectAnotherRandomPoint(size_t point)
 {
-	short angle = (short)(getRandomValueFromExponentialDist() * (mPointCloud.numAngles()) + angleIndex(point) + mPointCloud.numAngles() / 4) % mPointCloud.numAngles();
-	return selectRandomPointWithValidAngle(angle);
+	short angle = std::find(mAngles.begin(), mAngles.end(), angleIndex(point)) - mAngles.begin();
+	short randomAngle = (short)(getRandomValueFromExponentialDist() * mAngles.size());
+	short orthogonalAngle = mAngles[(randomAngle + angle + mAngles.size() / 2) % mAngles.size()];
+	return selectRandomPointFromAngle(orthogonalAngle);
 }
 	
