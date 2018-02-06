@@ -335,8 +335,13 @@ void subdivide(HoughCell *parentCell, HoughAccumulator *accumulator, const std::
 				displayInteractiveFrame(pointClouds, parentCell, accumulator, ellipses);
 			#endif
 		}
-		//else
-		//{
+		else
+		{
+			#ifdef _DEBUG_INTERACTIVE
+				ellipses.push_back(ellipse);
+				displayInteractiveFrame(pointClouds, parentCell, accumulator, ellipses);
+				ellipses.erase(ellipses.begin() + ellipses.size() - 1);
+			#endif
 			//for (const Intersection &intersection : accumulator->intersections())
 			//{
 				//intersection.sampler->addPoint(intersection.p1);
@@ -350,7 +355,7 @@ void subdivide(HoughCell *parentCell, HoughAccumulator *accumulator, const std::
 				subdivide(parentCell, childAccumulator, pointClouds, ellipses);
 			}
 			findEllipses(parentCell, pointClouds, ellipses);*/
-		//}	
+		}	
 	}
 }
  
@@ -359,7 +364,9 @@ void findEllipses(HoughCell *cell, const std::vector<PointCloud> &pointClouds, s
 	for (const PointCloud &pointCloud : pointClouds)
 	{
 		Sampler *sampler = pointCloud.sampler();
-		while (sampler->canSample())
+		size_t maxNumSamples = sampler->numAvailablePoints() * (360 / pointCloud.numAngles());
+		size_t currentSample = 0;
+		while (sampler->canSample() && currentSample < maxNumSamples)
 		{
 			HoughAccumulator *accumulator = cell->addIntersection(sampler);
 			if (accumulator != NULL)
@@ -372,6 +379,8 @@ void findEllipses(HoughCell *cell, const std::vector<PointCloud> &pointClouds, s
 					subdivide(cell, accumulator, pointClouds, ellipses);
 				}
 			}
+			++currentSample;
+			maxNumSamples = sampler->numAvailablePoints() * (360 / pointCloud.numAngles());
 		}
 	}
 } 

@@ -53,15 +53,12 @@ cv::Rect2f PointCloud::createPointCloudsFromImage(const cv::Mat &img, int cannyL
 		point->isGroup = group == edgeIndex;
 		if (point->isGroup)
 		{
-			point->index = pointClouds[label].mGroups.size();
-			point->maxNumSamples = imgUtils.numPointsInGroup(edgeIndex);
 			sPoints[imgUtils.reverseIndexOf(edgeIndex)] = point;
 			pointClouds[label].mGroups.push_back(point);
 			pointClouds[label].mPoints.push_back(point);
 		}
 		else
 		{
-			point->index = pointClouds[label].mPoints.size();
 			sPoints[imgUtils.reverseIndexOf(edgeIndex)] = point;
 			pointClouds[label].mPoints.push_back(point);
 		}
@@ -71,10 +68,10 @@ cv::Rect2f PointCloud::createPointCloudsFromImage(const cv::Mat &img, int cannyL
 	{
 		//pointClouds[i].mCenter = imgUtils.center(i);
 		pointClouds[i].setExtension();
-		for (Point *point : pointClouds[i].mGroups)
+		std::sort(pointClouds[i].mGroups.begin(), pointClouds[i].mGroups.end(), [](const Point *a, const Point *b)
 		{
-			point->maxNumSamples = point->maxNumSamples * anglesPerIndex * 10;
-		}
+			return a->angleIndex < b->angleIndex;
+		});
 	}
 	//360 / mPointCloud.numAngles()
 	

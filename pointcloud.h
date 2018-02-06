@@ -14,7 +14,6 @@ struct Point
 	int angleIndex;
 	bool isGroup;
 	PointCloud *pointCloud;
-	size_t maxNumSamples;
 };
 
 class Sampler;

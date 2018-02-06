@@ -26,6 +26,11 @@ public:
 		return mPointCloud.numGroups();
 	}
 	
+	short numAngles() const 
+	{
+		return mPointCloud.numAngles();
+	}
+	
 	short minNumAngles() const 
 	{
 		return mMinNumAngles;
@@ -42,8 +47,6 @@ public:
 	
 	void removePoint(size_t point);
 	
-	void addPoint(size_t point);
-	
 	bool isRemoved(size_t point) const
 	{
 		return mPoints[point] != point;
@@ -54,14 +57,12 @@ private:
 	static boost::exponential_distribution<float> sDistribution;
 	static boost::variate_generator<boost::mt19937, boost::exponential_distribution<float> > sGenerator;
 	const PointCloud &mPointCloud;
-	const short mMinNumAngles;
+	short mMinNumAngles;
 	size_t *mPoints;
-	size_t **mPointsPerAngle;
-	size_t *mTotalNumPointsPerAngle;
-	size_t *mNumPointsPerAngle;
-	size_t *mNumPicksPerPoint;
-	size_t mNumEmptyAngles;
+	size_t *mCountPointsPerAngle;
+	size_t *mStartingIndicesPerAngle;
 	size_t mNumAvailablePoints;
+	size_t mNumEmptyAngles;
 	size_t mCurrentAngle;
 	
 	short angleIndex(size_t point) const 
@@ -69,7 +70,7 @@ private:
 		return mPointCloud.group(point).angleIndex;
 	}
 	
-	size_t getPoint(size_t index);
+	size_t getValidPoint(size_t index);
 	
 	short decreaseOneAngle(short angle) const
 	{
@@ -83,9 +84,9 @@ private:
 		return angle + 1;
 	}
 	
-	size_t selectRandomPointWithAngle(short angle);
+	size_t selectRandomPointFromAngle(short angle);
 	
-	size_t selectRandomPointWithValidAngle(short angle);
+	size_t selectFromStartingAngle(short angle);
 	
 	size_t selectRandomPoint();
 	

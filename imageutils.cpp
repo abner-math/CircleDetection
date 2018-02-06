@@ -5,19 +5,19 @@
 #include "ED.h"
 
 ImageUtils::ImageUtils(const cv::Mat &img, short numAngles, int cannyLowThreshold, int cannyRatio, int cannyKernelSize)
-	: mNumAngles(numAngles)
+	: mImg(img)
+	, mNumAngles(numAngles)
 	, mEdgeIndices(NULL)
 	, mNeighborAngles(NULL)
 	, mLabels(NULL)
 	, mAngleIndices(NULL)
 	, mGroups(NULL)
-	, mCountInGroup(NULL)
 {	
 	//EdgeMap *edgeMap = DetectEdgesByEDPF(img.data, img.cols, img.rows);
 	//mEdges = cv::Mat(img.size(), CV_8U, edgeMap->edgeImg);
 	cv::Canny(img, mEdges, cannyLowThreshold, cannyLowThreshold * cannyRatio, cannyKernelSize);
 	createEdgeIndices();
-	cv::GaussianBlur(img, mImg, cv::Size(3, 3), 0, 0);
+	//cv::GaussianBlur(img, mImg, cv::Size(5, 5), 0, 0);
 	createNormals();
 }
 
@@ -33,8 +33,6 @@ ImageUtils::~ImageUtils()
 		delete[] mAngleIndices;
 	if (mGroups != NULL)
 		delete[] mGroups;
-	if (mCountInGroup != NULL)
-		delete[] mCountInGroup;
 }
 
 void ImageUtils::createEdgeIndices()
@@ -146,6 +144,7 @@ int ImageUtils::createConnectedComponents()
 	bool *marked = (bool*)calloc(mNumEdges, sizeof(bool));
 	mLabels = new int[mNumEdges];
 	int numLabels = 0;
+	int threshold = (int)std::ceil(20.0 / (360 / mNumAngles)); 
 	for (int edgeSeed = 0; edgeSeed < mNumEdges; edgeSeed++)
 	{
 		if (!marked[edgeSeed])
@@ -163,7 +162,7 @@ int ImageUtils::createConnectedComponents()
 				{
 					int neighbor = neighborIndex(index, i);
 					int edgeNeighbor = mEdgeIndices[neighbor];
-					if (isEdge(neighbor) && !marked[edgeNeighbor] && mNeighborAngles[edgeNeighbor * 8 + 7 - i] < 6)
+					if (isEdge(neighbor) && !marked[edgeNeighbor] && mNeighborAngles[edgeNeighbor * 8 + 7 - i] < threshold)
 					{
 						marked[edgeNeighbor] = true;
 						mLabels[edgeNeighbor] = numLabels;
@@ -184,7 +183,6 @@ int ImageUtils::groupPointsByAngle()
 {
 	mGroups = new int[mNumEdges];
 	bool *marked = (bool*)calloc(mNumEdges, sizeof(bool));
-	mCountInGroup = (int*)calloc(mNumEdges, sizeof(int));
 	int numGroups = 0;
 	std::queue<int> queue;
 	for (int edgeSeed = 0; edgeSeed < mNumEdges; edgeSeed++)
@@ -199,12 +197,11 @@ int ImageUtils::groupPointsByAngle()
 			{
 				int index = queue.front();
 				queue.pop();
-				++mCountInGroup[edgeSeed];
 				for (int i = 0; i < 8; i++)
 				{
 					int neighbor = neighborIndex(index, i);
 					int edgeNeighbor = mEdgeIndices[neighbor];
-					if (isEdge(neighbor) && !marked[edgeNeighbor] && mLabels[edgeSeed] == mLabels[edgeNeighbor] && 
+					if (isEdge(neighbor) && !marked[edgeNeighbor] && 
 						(mAngleIndices[edgeSeed] == mAngleIndices[edgeNeighbor] || 
 						mAngleIndices[edgeSeed] == (mAngleIndices[edgeNeighbor] + mNumAngles / 2) % mNumAngles))
 					{
