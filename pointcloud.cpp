@@ -33,13 +33,6 @@ cv::Rect2f PointCloud::createPointCloudsFromImage(const cv::Mat &img, int cannyL
 		gTimeCreateConnectedComponents += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
 		begin = std::chrono::high_resolution_clock::now();
 	#endif
-	//int numGroups = imgUtils.groupPointsByAngle();
-	//std::cout << "Num groups: " << numGroups << " (previously " << imgUtils.numEdges() << ": " << (1 - numGroups / (float)imgUtils.numEdges()) * 100 << "% reduction)" << std::endl;
-	#ifdef _BENCHMARK
-		end = std::chrono::high_resolution_clock::now();
-		gTimeGroupPoints += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
-		begin = std::chrono::high_resolution_clock::now();
-	#endif
 	pointClouds = std::vector<PointCloud*>(numConnectedComponents, NULL);
 	for (size_t i = 0; i < numConnectedComponents; i++)
 	{
@@ -57,20 +50,9 @@ cv::Rect2f PointCloud::createPointCloudsFromImage(const cv::Mat &img, int cannyL
 		point->position = cv::Point2f(reverseIndex % img.cols, reverseIndex / img.cols);
 		point->normal = imgUtils.normal(edgeIndex);
 		point->angleIndex = imgUtils.angleIndexOf(edgeIndex);
-		//int group = imgUtils.groupOf(edgeIndex); 
-		//point->isGroup = group == edgeIndex;
-		//if (point->isGroup)
-		//{
-			point->curvature = imgUtils.curvature(edgeIndex);
-			pointClouds[label]->mGroups.push_back(point);
-			//pointClouds[label]->mPoints.push_back(point);
-			pointClouds[label]->mAngles.insert(point->angleIndex);
-		//}
-		//else
-		//{
-		//	sPoints[reverseIndex] = point;
-		//	pointClouds[label]->mPoints.push_back(point);
-		//}
+		point->curvature = imgUtils.curvature(edgeIndex);
+		pointClouds[label]->mPoints.push_back(point);
+		pointClouds[label]->mAngles.insert(point->angleIndex);
 		point->pointCloud = pointClouds[label];
 		sPoints[reverseIndex] = point;
 	}	
@@ -83,15 +65,15 @@ cv::Rect2f PointCloud::createPointCloudsFromImage(const cv::Mat &img, int cannyL
 	{
 		if (pointClouds[i] == NULL) continue;
 		pointClouds[i]->setExtension();
-		if (pointClouds[i]->mGroups.size() >= minNumAngles && pointClouds[i]->mAngles.size() >= minNumAngles)
+		if (pointClouds[i]->mPoints.size() >= minNumAngles && pointClouds[i]->mAngles.size() >= minNumAngles)
 		{
-			std::sort(pointClouds[i]->mGroups.begin(), pointClouds[i]->mGroups.end(), [](const Point *a, const Point *b)
+			std::sort(pointClouds[i]->mPoints.begin(), pointClouds[i]->mPoints.end(), [](const Point *a, const Point *b)
 			{
 				return (a->angleIndex < b->angleIndex) || ((a->angleIndex == b->angleIndex) && (a->curvature > b->curvature));
 			});
-			for (size_t j = 0; j < pointClouds[i]->mGroups.size(); j++)
+			for (size_t j = 0; j < pointClouds[i]->mPoints.size(); j++)
 			{
-				pointClouds[i]->mGroups[j]->index = j;
+				pointClouds[i]->mPoints[j]->index = j;
 			}
 		}
 	}
@@ -118,7 +100,7 @@ void PointCloud::setExtension()
 	float minX, minY, maxX, maxY;
 	minX = minY = std::numeric_limits<float>::max();
 	maxX = maxY = -std::numeric_limits<float>::max();
-	for (const Point *point : mGroups)
+	for (const Point *point : mPoints)
 	{
 		float x = point->position.x;
 		float y = point->position.y;

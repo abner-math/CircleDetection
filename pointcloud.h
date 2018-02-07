@@ -15,7 +15,6 @@ struct Point
 	cv::Point2f normal;
 	int angleIndex;
 	int curvature;
-	bool isGroup;
 	PointCloud *pointCloud;
 };
 
@@ -38,11 +37,6 @@ public:
 		return mPoints.size();
 	}
 	
-	size_t numGroups() const 
-	{
-		return mGroups.size();
-	}
-	
 	const cv::Point2f& center() const 
 	{
 		return mCenter;
@@ -51,11 +45,6 @@ public:
 	const Point& point(size_t index) const 
 	{
 		return *mPoints[index];
-	}
-	
-	const Point& group(size_t index) const 
-	{
-		return *mGroups[index];
 	}
 	
 	const cv::Rect2f& extension() const 
@@ -89,7 +78,6 @@ private:
 	static cv::Mat sEdgeImg;
 	static std::vector<Point*> sPoints;
 	std::vector<Point*> mPoints;
-	std::vector<Point*> mGroups;
 	short mNumAngles;
 	cv::Rect2f mExtension;
 	cv::Point2f mCenter;

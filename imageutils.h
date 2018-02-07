@@ -79,13 +79,6 @@ public:
 		return mLabelsCount[label];
 	}
 	
-	int groupPointsByAngle();
-	
-	int groupOf(int edgeIndex)
-	{
-		return mGroups[edgeIndex];
-	}
-	
 	float curvature(int edgeIndex) const;
 	
 private:
@@ -100,10 +93,9 @@ private:
 	int *mEdgeIndices;
 	int *mReverseEdgeIndices;
 	short *mNeighborAngles;
+	short *mAngleIndices;
 	int *mLabels;
 	std::vector<size_t> mLabelsCount;
-	short *mAngleIndices;
-	int *mGroups;
 
 	void createEdgeIndices();
 	

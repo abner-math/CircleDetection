@@ -11,7 +11,6 @@ ImageUtils::ImageUtils(const cv::Mat &img, short numAngles, int cannyLowThreshol
 	, mNeighborAngles(NULL)
 	, mLabels(NULL)
 	, mAngleIndices(NULL)
-	, mGroups(NULL)
 {	
 	//EdgeMap *edgeMap = DetectEdgesByEDPF(img.data, img.cols, img.rows);
 	//mEdges = cv::Mat(img.size(), CV_8U, edgeMap->edgeImg);
@@ -32,8 +31,6 @@ ImageUtils::~ImageUtils()
 		delete[] mLabels; 
 	if (mAngleIndices != NULL)
 		delete[] mAngleIndices;
-	if (mGroups != NULL)
-		delete[] mGroups;
 }
 
 void ImageUtils::createEdgeIndices()
@@ -153,44 +150,6 @@ int ImageUtils::createConnectedComponents()
 	}
 	delete[] marked;
 	return numLabels;
-}
-
-int ImageUtils::groupPointsByAngle()
-{
-	mGroups = new int[mNumEdges];
-	bool *marked = (bool*)calloc(mNumEdges, sizeof(bool));
-	int numGroups = 0;
-	std::queue<int> queue;
-	for (int edgeSeed = 0; edgeSeed < mNumEdges; edgeSeed++)
-	{
-		int count = 0;
-		if (!marked[edgeSeed])
-		{
-			marked[edgeSeed] = true;
-			mGroups[edgeSeed] = edgeSeed;
-			queue.push(mReverseEdgeIndices[edgeSeed]);
-			while (!queue.empty())
-			{
-				int index = queue.front();
-				int edgeIndex = mEdgeIndices[index];
-				queue.pop();
-				for (int i = 0; i < 8; i++)
-				{
-					int neighbor = neighborIndex(index, i);
-					int edgeNeighbor = mEdgeIndices[neighbor];
-					if (isEdge(neighbor) && !marked[edgeNeighbor] && angleBetween(edgeSeed, edgeNeighbor) <= 5)
-					{
-						marked[edgeNeighbor] = true;
-						mGroups[edgeNeighbor] = edgeSeed;
-						queue.push(neighbor);
-					}
-				}
-			}
-			++numGroups;
-		}
-	}
-	delete[] marked;
-	return numGroups;
 }
 
 float ImageUtils::curvature(int edgeIndex) const

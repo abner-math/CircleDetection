@@ -13,8 +13,8 @@ HoughAccumulator::HoughAccumulator(HoughCell *cell, float radius)
 
 void HoughAccumulator::accumulate(const Intersection &intersection)
 {
-	const Point &p1 = intersection.sampler->pointCloud().group(intersection.p1);
-	const Point &p2 = intersection.sampler->pointCloud().group(intersection.p2);
+	const Point &p1 = intersection.sampler->pointCloud().point(intersection.p1);
+	const Point &p2 = intersection.sampler->pointCloud().point(intersection.p2);
 	short angle1 = p1.angleIndex;
 	short angle2 = p2.angleIndex;
 	mAngles.insert(angle1);

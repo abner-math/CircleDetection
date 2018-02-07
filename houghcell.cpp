@@ -99,8 +99,8 @@ bool HoughCell::intersectionBetweenPoints(Sampler *sampler, const std::pair<size
 	#ifdef _BENCHMARK
 		auto begin = std::chrono::high_resolution_clock::now();
 	#endif
-	const Point &p1 = sampler->pointCloud().group(sample.first);
-	const Point &p2 = sampler->pointCloud().group(sample.second);
+	const Point &p1 = sampler->pointCloud().point(sample.first);
+	const Point &p2 = sampler->pointCloud().point(sample.second);
 	
 	cv::Point2f a = p1.position;
 	cv::Point2f b = p1.position + p1.normal;

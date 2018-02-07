@@ -26,7 +26,7 @@ public:
 	
 	size_t numPoints() const 
 	{
-		return mPointCloud.numGroups();
+		return mPointCloud.numPoints();
 	}
 	
 	short numAngles() const 
@@ -72,7 +72,7 @@ private:
 	
 	short angleIndex(size_t point) const 
 	{
-		return mPointCloud.group(point).angleIndex;
+		return mPointCloud.point(point).angleIndex;
 	}
 	
 	size_t getValidPoint(size_t index);

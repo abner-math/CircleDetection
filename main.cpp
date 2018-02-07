@@ -25,7 +25,6 @@ int gMaxDepth;
 #ifdef _BENCHMARK
 double gTimeProcessImage;
 double gTimeCreateConnectedComponents;
-double gTimeGroupPoints;
 double gTimeCreatePointCloud;
 double gTimeCreateSampler;
 double gTimeSample1;
@@ -91,17 +90,8 @@ void drawNormals(const PointCloud &pointCloud, cv::Scalar color = cv::Scalar(255
 	{
 		drawLine(pointCloud.point(i).position, pointCloud.point(i).position + pointCloud.point(i).normal * 10, color);
 	}
-	drawPoint(pointCloud.center(), cv::Scalar(0, 255, 0));
 }
 
-void drawGroups(const PointCloud &pointCloud, cv::Scalar color = cv::Scalar(255, 255, 255))
-{
-	for (size_t i = 0; i < pointCloud.numGroups(); i++)
-	{
-		drawPoint(pointCloud.group(i).position, color);
-	}
-}
-  
 #ifdef _DEBUG_INTERACTIVE
 void drawCells(const HoughCell *cell, HoughAccumulator *accumulator)
 {
@@ -134,8 +124,8 @@ void drawCells(const HoughCell *cell, HoughAccumulator *accumulator)
 						color = cv::Scalar(0, 255, 0);
 					else 
 						color = cv::Scalar(0, 0, 255);
-					const Point &p1 = intersection.sampler->pointCloud().group(intersection.p1);
-					const Point &p2 = intersection.sampler->pointCloud().group(intersection.p2);
+					const Point &p1 = intersection.sampler->pointCloud().point(intersection.p1);
+					const Point &p2 = intersection.sampler->pointCloud().point(intersection.p2);
 					drawLine(p1.position, p1.position + p1.normal * 10, color);
 					drawLine(p2.position, p2.position + p2.normal * 10, color);
 					drawPoint(intersection.position, color);
@@ -236,20 +226,6 @@ void displayInteractivePreprocessing(const std::vector<PointCloud*> &pointClouds
 	}
 	cv::imshow(gEdgeWindowName, gFrame);
 	cv::waitKey(0);
-	gFrame = cv::Mat::zeros(gFrame.size(), CV_8UC3);
-	for (size_t i = 0; i < pointClouds.size(); i++)
-	{
-		if (pointClouds[i] != NULL)
-			drawGroups(*pointClouds[i], colors[i]);
-	}
-	cv::imshow(gEdgeWindowName, gFrame);
-	cv::waitKey(0);
-	gFrame = cv::Mat::zeros(gFrame.size(), CV_8UC3);
-	for (size_t i = 0; i < pointClouds.size(); i++)
-	{
-		if (pointClouds[i] != NULL)
-			drawGroups(*pointClouds[i], colors[i]);
-	}
 }
 #endif 
 
@@ -297,10 +273,11 @@ cv::Point2i getCenteredCircle(const cv::Rect2i &boundingRect, const Circle &circ
 
 size_t removeCirclePoints(const HoughCell *cell, const std::vector<PointCloud*> &pointClouds, const Circle &circle)
 {
-	cv::Rect2i boundingRect = getCircleBoundingRect(PointCloud::edgeImg(), circle, (int)cell->size());
+	int thickness = (int)cell->size();//std::max((int)cell->size(), (int)circle.radius / 10);
+	cv::Rect2i boundingRect = getCircleBoundingRect(PointCloud::edgeImg(), circle, thickness);
 	cv::Mat referenceImg = cv::Mat::zeros(boundingRect.size(), CV_8U);
 	cv::Point2i newCenter = getCenteredCircle(boundingRect, circle);
-	cv::circle(referenceImg, newCenter, (int)circle.radius, cv::Scalar(255, 255, 255), (int)cell->size());
+	cv::circle(referenceImg, newCenter, (int)circle.radius, cv::Scalar(255, 255, 255), thickness);
 	return removePoints(cell, pointClouds, boundingRect, referenceImg);
 }
 
@@ -323,10 +300,11 @@ cv::RotatedRect getCenteredEllipse(const cv::Rect2i &boundingRect, const Ellipse
 
 size_t removeEllipsePoints(const HoughCell *cell, const std::vector<PointCloud*> &pointClouds, const Ellipse &ellipse)
 {
-	cv::Rect2i boundingRect = getEllipseBoundingRect(PointCloud::edgeImg(), ellipse, (int)cell->size());
+	int thickness = (int)cell->size();//std::max((int)cell->size(), (int)std::min(ellipse.rect.size.width, ellipse.rect.size.height) / 10);
+	cv::Rect2i boundingRect = getEllipseBoundingRect(PointCloud::edgeImg(), ellipse, thickness);
 	cv::Mat referenceImg = cv::Mat::zeros(boundingRect.size(), CV_8U);
 	cv::RotatedRect newEllipse = getCenteredEllipse(boundingRect, ellipse);
-	cv::ellipse(referenceImg, newEllipse, cv::Scalar(255, 255, 255), (int)cell->size());
+	cv::ellipse(referenceImg, newEllipse, cv::Scalar(255, 255, 255), thickness);
 	return removePoints(cell, pointClouds, boundingRect, referenceImg);
 }
 
@@ -479,10 +457,11 @@ void findCirclesAndEllipses(HoughCell *cell, const std::vector<PointCloud*> &poi
 
 void cannyCallback(int slider, void *userData)
 {
+	std::srand(time(NULL));
+	std::cout << rand() << std::endl;
 	#ifdef _BENCHMARK
 		gTimeProcessImage = 0;
 		gTimeCreateConnectedComponents = 0;
-		gTimeGroupPoints = 0;
 		gTimeCreatePointCloud = 0;
 		gTimeCreateSampler = 0;
 		gTimeSample1 = 0;
@@ -516,10 +495,9 @@ void cannyCallback(int slider, void *userData)
 	#ifdef _BENCHMARK
 		std::cout << "\tTime to process image: " << gTimeProcessImage / 1e6 << "ms (" << gTimeProcessImage / durationPreprocessing * 100 << "%)" << std::endl
 					<< "\tTime to create connected components: " << gTimeCreateConnectedComponents / 1e6 << "ms (" << gTimeCreateConnectedComponents / durationPreprocessing * 100 << "%)" << std::endl
-					<< "\tTime to group points: " << gTimeGroupPoints / 1e6 << "ms (" << gTimeGroupPoints / durationPreprocessing * 100 << "%)" << std::endl
 					<< "\tTime to create point cloud: " << gTimeCreatePointCloud / 1e6 << "ms (" << gTimeCreatePointCloud / durationPreprocessing * 100 << "%)" << std::endl
 					<< "\tTime to create sampler: " << gTimeCreateSampler / 1e6 << "ms (" << gTimeCreateSampler / durationPreprocessing * 100 << "%)" << std::endl
-					<< "\tExplained: " << (gTimeProcessImage + gTimeCreateConnectedComponents + gTimeGroupPoints + gTimeCreatePointCloud + gTimeCreateSampler) / durationPreprocessing * 100 << "%" << std::endl;
+					<< "\tExplained: " << (gTimeProcessImage + gTimeCreateConnectedComponents + gTimeCreatePointCloud + gTimeCreateSampler) / durationPreprocessing * 100 << "%" << std::endl;
 	#endif 
 	// Draw points 
 	gFrame = cv::Mat::zeros(gray.size(), CV_8UC3);
@@ -593,8 +571,6 @@ void cannyCallback(int slider, void *userData)
 
 int main(int argc, char **argv)
 {
-	std::srand(time(NULL));
-
 	if (argc < 4)
 	{
 		std::cerr << "Usage: ARHT <INPUT_IMAGE> <CANNY_MIN_THRESHOLD> <MAX_DEPTH>" << std::endl;
