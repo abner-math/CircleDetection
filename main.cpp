@@ -580,15 +580,15 @@ int main(int argc, char **argv)
 	}
 	std::string inputFilename(argv[1]);
 	gImg = cv::imread(inputFilename);
-	cv::cvtColor(gImg, gImgGray, CV_BGR2GRAY);
-	gCannyLowThreshold = atoi(argv[2]);
-	gPrecision = atof(argv[3]);
-	
 	if (!gImg.data)
 	{
 		std::cerr << "ERROR: Could not read image." << std::endl;
 		return -1;
 	}
+	cv::cvtColor(gImg, gImgGray, CV_BGR2GRAY);
+	gCannyLowThreshold = atoi(argv[2]);
+	gPrecision = atof(argv[3]);
+	
 	cv::namedWindow(gEdgeWindowName, CV_WINDOW_AUTOSIZE);
 	//cv::createTrackbar("Min threshold:", gEdgeWindowName, &gCannyLowThreshold, 100, cannyCallback);
 	//cv::createTrackbar("Max depth:", gEdgeWindowName, &gMaxDepth, 15, cannyCallback);
