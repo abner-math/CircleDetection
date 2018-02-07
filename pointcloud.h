@@ -14,6 +14,7 @@ struct Point
 	cv::Point2f position; 
 	cv::Point2f normal;
 	int angleIndex;
+	int curvature;
 	bool isGroup;
 	PointCloud *pointCloud;
 };
@@ -23,7 +24,7 @@ class Sampler;
 class PointCloud
 {
 public:
-	static cv::Rect2f createPointCloudsFromImage(const cv::Mat &img, int cannyLowThreshold, short numAngles, short minNumAngles, std::vector<PointCloud> &pointClouds);
+	static cv::Rect2f createPointCloudsFromImage(const cv::Mat &img, int cannyLowThreshold, short numAngles, short minNumAngles, std::vector<PointCloud*> &pointClouds);
 
 	~PointCloud();
 	
@@ -99,7 +100,7 @@ private:
 	
 	void setExtension();
 	
-	static cv::Rect2f getExtension(const std::vector<PointCloud> &pointClouds);
+	static cv::Rect2f getExtension(const std::vector<PointCloud*> &pointClouds);
 	
 };
 

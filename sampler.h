@@ -10,7 +10,7 @@
 
 #include "pointcloud.h"
 
-#define MAX_NUM_PICKS 3 
+#define MAX_NUM_PICKS 5
 
 class Sampler
 {
@@ -63,12 +63,11 @@ private:
 	const PointCloud &mPointCloud;
 	short mMinNumAngles;
 	size_t *mPoints;
-	size_t *mNumPicks;
 	std::map<short, size_t> mCountPointsPerAngle;
 	std::map<size_t, size_t> mStartingIndicesPerAngle;
-	std::map<short, size_t> mCurrentIndexInAngle;
 	std::set<short>::const_iterator mCurrentAngle;
 	std::map<short, short> mOppositeAngles;
+	size_t *mNumPicks;
 	size_t mNumAvailablePoints;
 	
 	short angleIndex(size_t point) const 

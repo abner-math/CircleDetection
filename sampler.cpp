@@ -16,9 +16,9 @@ Sampler::Sampler(const PointCloud &pointCloud, short minNumAngles)
 	{
 		mPoints = new size_t[numPoints()];
 		std::iota(mPoints, mPoints + numPoints(), 0);
+		mNumPicks = (size_t*)calloc(numPoints(), sizeof(size_t));
 		int lastAngle = angleIndex(0);
 		mStartingIndicesPerAngle[lastAngle] = 0;
-		mCurrentIndexInAngle[lastAngle] = 0;
 		size_t count = 0;
 		for (size_t i = 0; i < numPoints(); i++)
 		{
@@ -26,7 +26,6 @@ Sampler::Sampler(const PointCloud &pointCloud, short minNumAngles)
 			if (angle != lastAngle)
 			{
 				mStartingIndicesPerAngle[angle] = i;
-				mCurrentIndexInAngle[angle] = 0;
 				mCountPointsPerAngle[lastAngle] = count;
 				count = 1;
 				lastAngle = angle;
@@ -39,7 +38,6 @@ Sampler::Sampler(const PointCloud &pointCloud, short minNumAngles)
 		mCountPointsPerAngle[lastAngle] = count;
 		mCurrentAngle = mPointCloud.angles().begin();
 		mNumAvailablePoints = numPoints();
-		mNumPicks = (size_t*)calloc(numPoints(), sizeof(size_t));
 		for (const short &angle1 : mPointCloud.angles())
 		{
 			short maxDist = 0;
@@ -70,7 +68,7 @@ Sampler::~Sampler()
 
 bool Sampler::canSample() const 
 {
-	return numAvailablePoints() >= mMinNumAngles && mPointCloud.angles().size() >= mMinNumAngles;
+	return mPoints != NULL && numAvailablePoints() >= 2;// && mPointCloud.angles().size() >= mMinNumAngles;
 }
 
 std::pair<size_t, size_t> Sampler::sample()  
@@ -80,22 +78,26 @@ std::pair<size_t, size_t> Sampler::sample()
 		auto begin = std::chrono::high_resolution_clock::now();
 	#endif 
 	p.first = selectRandomPoint();
-	++mNumPicks[p.first];
-	if (mNumPicks[p.first] >= MAX_NUM_PICKS)
+	if (++mNumPicks[p.first] > MAX_NUM_PICKS)
+	{
 		removePoint(p.first);
+	}
 	#ifdef _BENCHMARK
 		auto end = std::chrono::high_resolution_clock::now();
 		gTimeSample1 += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
 		begin = std::chrono::high_resolution_clock::now();
 	#endif 
 	p.second = selectAnotherRandomPoint(p.first);
-	++mNumPicks[p.second];
-	if (mNumPicks[p.second] >= MAX_NUM_PICKS)
+	if (++mNumPicks[p.second] > MAX_NUM_PICKS)
+	{
 		removePoint(p.second);
+	}
 	#ifdef _BENCHMARK
 		end = std::chrono::high_resolution_clock::now();
 		gTimeSample2 += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
 	#endif 
+	if (++mCurrentAngle == mPointCloud.angles().end())
+		mCurrentAngle = mPointCloud.angles().begin();
 	return p;
 }
 	
@@ -124,26 +126,22 @@ void Sampler::removePoint(size_t point)
 
 size_t Sampler::selectRandomPointFromAngle(short angle) 
 {
-	size_t index = rand() % mCountPointsPerAngle[angle];
-	return getValidPoint(mPoints[mStartingIndicesPerAngle[angle] + index]);
+	size_t n = (size_t)(getRandomValueFromExponentialDist() * mCountPointsPerAngle[angle]);
+	return getValidPoint(mPoints[mStartingIndicesPerAngle[angle] + n]);
 }
 
 size_t Sampler::selectRandomPoint()  
 {
-	size_t point = getValidPoint(mPoints[mStartingIndicesPerAngle[*mCurrentAngle] + mCurrentIndexInAngle[*mCurrentAngle]]);
-	mCurrentIndexInAngle[*mCurrentAngle] = (mCurrentIndexInAngle[*mCurrentAngle] + 1) % mCountPointsPerAngle[*mCurrentAngle];
-	//size_t point = selectRandomPointFromAngle(*mCurrentAngle);
-	if (++mCurrentAngle == mPointCloud.angles().end())
-		mCurrentAngle = mPointCloud.angles().begin();
-	return point;
+	//size_t point = getValidPoint(mPoints[mStartingIndicesPerAngle[*mCurrentAngle]]);
+	//return point;
+	short angle = (*mCurrentAngle + (short)(getRandomValueFromExponentialDist() * numAngles())) % numAngles();
+	return selectRandomPointFromAngle(angle);
 }
 
 size_t Sampler::selectAnotherRandomPoint(size_t point)
 {
-	return mPoints[mStartingIndicesPerAngle[mOppositeAngles[angleIndex(point)]]];
-	//short angle = std::find(mAngles.begin(), mAngles.end(), angleIndex(point)) - mAngles.begin();
-	//short randomAngle = (short)(getRandomValueFromExponentialDist() * mAngles.size());
-	//short orthogonalAngle = mAngles[(randomAngle + angle + mAngles.size() / 2) % mAngles.size()];
-	//return selectRandomPointFromAngle(orthogonalAngle);
+	//return mPoints[mStartingIndicesPerAngle[mOppositeAngles[*mCurrentAngle]] + mNumPicks[*mCurrentAngle]];
+	short angle = (mOppositeAngles[*mCurrentAngle] + (short)(getRandomValueFromExponentialDist() * numAngles())) % numAngles();
+	return selectRandomPointFromAngle(angle);
 }
 	

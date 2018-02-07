@@ -156,22 +156,23 @@ void drawCells(const HoughCell *cell, HoughAccumulator *accumulator)
 	}
 }
 
-void displayInteractiveFrame(const std::vector<PointCloud> &pointClouds, const HoughCell *cell, HoughAccumulator *accumulator, 
+void displayInteractiveFrame(const std::vector<PointCloud*> &pointClouds, const HoughCell *cell, HoughAccumulator *accumulator, 
 	const std::vector<Circle> &circles, const std::vector<Ellipse> &ellipses)
 {
 	cv::Mat img = gFrame.clone();
-	for (const PointCloud &pointCloud : pointClouds)
+	for (const PointCloud *pointCloud : pointClouds)
 	{
-		Sampler *sampler = pointCloud.sampler();
+		if (pointCloud == NULL) continue;
+		Sampler *sampler = pointCloud->sampler();
 		for (size_t i = 0; i < sampler->numPoints(); i++)
 		{
 			if (sampler->isRemoved(i))
 			{
-				drawPoint(pointCloud.group(i).position, cv::Scalar(0, 0, 255));
+				drawPoint(pointCloud->group(i).position, cv::Scalar(0, 0, 255));
 			}
 			else
 			{
-				drawPoint(pointCloud.group(i).position, cv::Scalar(255, 255, 255));
+				drawPoint(pointCloud->group(i).position, cv::Scalar(255, 255, 255));
 			}
 		}
 	}
@@ -203,18 +204,20 @@ void displayInteractiveFrame(const std::vector<PointCloud> &pointClouds, const H
 	gFrame = img;
 }
 
-void displayInteractivePreprocessing(const std::vector<PointCloud> &pointClouds)
+void displayInteractivePreprocessing(const std::vector<PointCloud*> &pointClouds)
 {
 	for (size_t i = 0; i < pointClouds.size(); i++)
 	{
-		drawPoints(pointClouds[i]);
+		if (pointClouds[i] != NULL)
+			drawPoints(*pointClouds[i]);
 	}
 	cv::imshow(gEdgeWindowName, gFrame);
 	cv::waitKey(0);
 	gFrame = cv::Mat::zeros(gFrame.size(), CV_8UC3);
 	for (size_t i = 0; i < pointClouds.size(); i++)
 	{
-		drawNormals(pointClouds[i], cv::Scalar(0, 0, 255));
+		if (pointClouds[i] != NULL)
+			drawNormals(*pointClouds[i], cv::Scalar(0, 0, 255));
 	}
 	cv::imshow(gEdgeWindowName, gFrame);
 	cv::waitKey(0);
@@ -228,26 +231,29 @@ void displayInteractivePreprocessing(const std::vector<PointCloud> &pointClouds)
 	}
 	for (size_t i = 0; i < pointClouds.size(); i++)
 	{
-		drawPoints(pointClouds[i], colors[i]);
+		if (pointClouds[i] != NULL)
+			drawPoints(*pointClouds[i], colors[i]);
 	}
 	cv::imshow(gEdgeWindowName, gFrame);
 	cv::waitKey(0);
 	gFrame = cv::Mat::zeros(gFrame.size(), CV_8UC3);
 	for (size_t i = 0; i < pointClouds.size(); i++)
 	{
-		drawGroups(pointClouds[i], colors[i]);
+		if (pointClouds[i] != NULL)
+			drawGroups(*pointClouds[i], colors[i]);
 	}
 	cv::imshow(gEdgeWindowName, gFrame);
 	cv::waitKey(0);
 	gFrame = cv::Mat::zeros(gFrame.size(), CV_8UC3);
 	for (size_t i = 0; i < pointClouds.size(); i++)
 	{
-		drawGroups(pointClouds[i], colors[i]);
+		if (pointClouds[i] != NULL)
+			drawGroups(*pointClouds[i], colors[i]);
 	}
 }
 #endif 
 
-size_t removePoints(const HoughCell *cell, const std::vector<PointCloud> &pointClouds, const cv::Rect2i &boundingRect, const cv::Mat &referenceImg)
+size_t removePoints(const HoughCell *cell, const std::vector<PointCloud*> &pointClouds, const cv::Rect2i &boundingRect, const cv::Mat &referenceImg)
 {
 	cv::Mat edgeImg = PointCloud::edgeImg();
 	cv::Mat croppedEdgeImg = edgeImg(boundingRect);
@@ -264,7 +270,7 @@ size_t removePoints(const HoughCell *cell, const std::vector<PointCloud> &pointC
 				int y_ = y + boundingRect.y;
 				int index_ = y_ * edgeImg.cols + x_;
 				Point *point = PointCloud::points()[index_];
-				if (point->isGroup && !point->pointCloud->sampler()->isRemoved(point->index))
+				if (point != NULL && !point->pointCloud->sampler()->isRemoved(point->index))
 				{
 					point->pointCloud->sampler()->removePoint(point->index);
 					++count;
@@ -289,7 +295,7 @@ cv::Point2i getCenteredCircle(const cv::Rect2i &boundingRect, const Circle &circ
 	return cv::Point2i(newCenterX, newCenterY);
 }
 
-size_t removeCirclePoints(const HoughCell *cell, const std::vector<PointCloud> &pointClouds, const Circle &circle)
+size_t removeCirclePoints(const HoughCell *cell, const std::vector<PointCloud*> &pointClouds, const Circle &circle)
 {
 	cv::Rect2i boundingRect = getCircleBoundingRect(PointCloud::edgeImg(), circle, (int)cell->size());
 	cv::Mat referenceImg = cv::Mat::zeros(boundingRect.size(), CV_8U);
@@ -315,7 +321,7 @@ cv::RotatedRect getCenteredEllipse(const cv::Rect2i &boundingRect, const Ellipse
 	return cv::RotatedRect(cv::Point2i(newCenterX, newCenterY), ellipse.rect.size, ellipse.rect.angle);
 }
 
-size_t removeEllipsePoints(const HoughCell *cell, const std::vector<PointCloud> &pointClouds, const Ellipse &ellipse)
+size_t removeEllipsePoints(const HoughCell *cell, const std::vector<PointCloud*> &pointClouds, const Ellipse &ellipse)
 {
 	cv::Rect2i boundingRect = getEllipseBoundingRect(PointCloud::edgeImg(), ellipse, (int)cell->size());
 	cv::Mat referenceImg = cv::Mat::zeros(boundingRect.size(), CV_8U);
@@ -363,7 +369,7 @@ bool isFalsePositive(Circle &circle)
 	return value < 0.5f;
 }
 
-void subdivide(HoughCell *parentCell, HoughAccumulator *accumulator, const std::vector<PointCloud> &pointClouds, 
+void subdivide(HoughCell *parentCell, HoughAccumulator *accumulator, const std::vector<PointCloud*> &pointClouds, 
 	std::vector<Circle> &circles, std::vector<Ellipse> &ellipses)
 {
 	HoughCell *cell = accumulator->cell();
@@ -448,28 +454,25 @@ void subdivide(HoughCell *parentCell, HoughAccumulator *accumulator, const std::
 	}
 }
  
-void findCirclesAndEllipses(HoughCell *cell, const std::vector<PointCloud> &pointClouds, std::vector<Circle> &circles, std::vector<Ellipse> &ellipses)
+void findCirclesAndEllipses(HoughCell *cell, const std::vector<PointCloud*> &pointClouds, std::vector<Circle> &circles, std::vector<Ellipse> &ellipses)
 {
-	for (const PointCloud &pointCloud : pointClouds)
+	for (const PointCloud *pointCloud : pointClouds)
 	{
-		Sampler *sampler = pointCloud.sampler();
-		size_t maxNumSamples = sampler->numAvailablePoints() * 5;
-		size_t currentSample = 0;
-		while (sampler->canSample() && currentSample < maxNumSamples)
+		if (pointCloud == NULL) continue;
+		Sampler *sampler = pointCloud->sampler();
+		while (sampler->canSample())
 		{
 			HoughAccumulator *accumulator = cell->addIntersection(sampler);
 			if (accumulator != NULL)
 			{
 				#ifdef _DEBUG_INTERACTIVE
-				//	displayInteractiveFrame(pointClouds, cell, accumulator, circles, ellipses);
+					displayInteractiveFrame(pointClouds, cell, accumulator, circles, ellipses);
 				#endif
 				if (accumulator->hasCandidate())
 				{
 					subdivide(cell, accumulator, pointClouds, circles, ellipses);
 				}
 			}
-			++currentSample;
-			maxNumSamples = sampler->numAvailablePoints() * 5;
 		}
 	}
 } 
@@ -496,12 +499,13 @@ void cannyCallback(int slider, void *userData)
 	cv::Mat gray = gImgGray.clone();
 	std::cout << "Image size: " << gray.size() << std::endl;
 	// Calculate normals and curvatures 
-	std::vector<PointCloud> pointClouds;
+	std::vector<PointCloud*> pointClouds;
 	cv::Rect2f extension = PointCloud::createPointCloudsFromImage(gray, gCannyLowThreshold, NUM_ANGLES, MIN_NUM_ANGLES, pointClouds);
 	std::cout << "Extension: " << extension << std::endl;
-	for (PointCloud &pointCloud : pointClouds)
+	for (PointCloud *pointCloud : pointClouds)
 	{
-		pointCloud.createSampler(MIN_NUM_ANGLES);
+		if (pointCloud != NULL)
+			pointCloud->createSampler(MIN_NUM_ANGLES);
 	}
 	float size = extension.width / 2;
 	cv::Point2f center(extension.x + size, extension.y + size);
@@ -562,6 +566,10 @@ void cannyCallback(int slider, void *userData)
 	cv::imshow(gEdgeWindowName, gFrame);
 	// Delete data
 	delete cell;
+	for (PointCloud *pointCloud : pointClouds)
+	{
+		delete pointCloud;
+	}
 	// OpenCV Hough Transform
 	begin = std::chrono::high_resolution_clock::now();
 	std::vector<cv::Vec3f> cvCircles;

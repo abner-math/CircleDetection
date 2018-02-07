@@ -15,9 +15,9 @@ ImageUtils::ImageUtils(const cv::Mat &img, short numAngles, int cannyLowThreshol
 {	
 	//EdgeMap *edgeMap = DetectEdgesByEDPF(img.data, img.cols, img.rows);
 	//mEdges = cv::Mat(img.size(), CV_8U, edgeMap->edgeImg);
-	cv::Canny(img, mEdges, cannyLowThreshold, cannyLowThreshold * cannyRatio, cannyKernelSize);
+	cv::Canny(mImg, mEdges, cannyLowThreshold, cannyLowThreshold * cannyRatio, cannyKernelSize);
 	createEdgeIndices();
-	//cv::GaussianBlur(img, mImg, cv::Size(5, 5), 0, 0);
+	//cv::GaussianBlur(mImg, mImg, cv::Size(5, 5), 0, 0);
 	createNormals();
 	calculateAngleIndices();
 }
@@ -129,10 +129,12 @@ int ImageUtils::createConnectedComponents()
 			marked[edgeSeed] = true;
 			mLabels[edgeSeed] = numLabels;
 			queue.push(mReverseEdgeIndices[edgeSeed]);
+			size_t countInLabel = 0;
 			while (!queue.empty())
 			{
 				int index = queue.front();
 				queue.pop();
+				++countInLabel;
 				for (int i = 0; i < 8; i++)
 				{
 					int neighbor = neighborIndex(index, i);
@@ -146,6 +148,7 @@ int ImageUtils::createConnectedComponents()
 				}
 			}
 			++numLabels;
+			mLabelsCount.push_back(countInLabel);
 		}
 	}
 	delete[] marked;
@@ -169,12 +172,13 @@ int ImageUtils::groupPointsByAngle()
 			while (!queue.empty())
 			{
 				int index = queue.front();
+				int edgeIndex = mEdgeIndices[index];
 				queue.pop();
 				for (int i = 0; i < 8; i++)
 				{
 					int neighbor = neighborIndex(index, i);
 					int edgeNeighbor = mEdgeIndices[neighbor];
-					if (isEdge(neighbor) && !marked[edgeNeighbor] && angleBetween(edgeSeed, edgeNeighbor) <= 3)
+					if (isEdge(neighbor) && !marked[edgeNeighbor] && angleBetween(edgeSeed, edgeNeighbor) <= 5)
 					{
 						marked[edgeNeighbor] = true;
 						mGroups[edgeNeighbor] = edgeSeed;
@@ -187,10 +191,25 @@ int ImageUtils::groupPointsByAngle()
 	}
 	delete[] marked;
 	return numGroups;
-	/*for (int edgeSeed = 0; edgeSeed < mNumEdges; edgeSeed++)
-	{
-		mGroups[edgeSeed] = edgeSeed;
-	}
-	return mNumEdges;*/
 }
 
+float ImageUtils::curvature(int edgeIndex) const
+{
+	int index = mReverseEdgeIndices[edgeIndex];
+	float sum = 0;
+	int count = 0;
+	for (int i = 0; i < 8; i++)
+	{
+		int neighbor = neighborIndex(index, i);
+		if (isEdge(neighbor))
+		{
+			int edgeNeighbor = mEdgeIndices[neighbor];
+			short angle = mNeighborAngles[edgeNeighbor * 8 + 7 - i];
+			sum += angle;
+			++count;
+		}
+	}
+	if (count == 0) return 0;
+	return sum / count;
+}
+	

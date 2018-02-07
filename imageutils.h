@@ -62,6 +62,11 @@ public:
 		return static_cast<short>(((float*)mSobelAngle.data)[edgeIndex]);
 	}
 	
+	short angleIndexOf(int edgeIndex)
+	{
+		return mAngleIndices[edgeIndex];
+	}
+	
 	int createConnectedComponents();
 	
 	int labelOf(int edgeIndex)
@@ -69,17 +74,19 @@ public:
 		return mLabels[edgeIndex];
 	}
 	
-	int groupPointsByAngle();
-	
-	short angleIndexOf(int edgeIndex)
+	size_t countPointsInComponent(int label)
 	{
-		return mAngleIndices[edgeIndex];
+		return mLabelsCount[label];
 	}
+	
+	int groupPointsByAngle();
 	
 	int groupOf(int edgeIndex)
 	{
 		return mGroups[edgeIndex];
 	}
+	
+	float curvature(int edgeIndex) const;
 	
 private:
 	cv::Mat mImg;
@@ -94,6 +101,7 @@ private:
 	int *mReverseEdgeIndices;
 	short *mNeighborAngles;
 	int *mLabels;
+	std::vector<size_t> mLabelsCount;
 	short *mAngleIndices;
 	int *mGroups;
 
