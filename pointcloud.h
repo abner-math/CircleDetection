@@ -1,6 +1,8 @@
 #ifndef _POINTCLOUD_H_
 #define _POINTCLOUD_H_
 
+#include <set>
+
 #include "imageutils.h"
 #include "benchmark.hpp"
  
@@ -21,7 +23,7 @@ class Sampler;
 class PointCloud
 {
 public:
-	static cv::Rect2f createPointCloudsFromImage(const cv::Mat &img, int cannyLowThreshold, short numAngles, std::vector<PointCloud> &pointClouds);
+	static cv::Rect2f createPointCloudsFromImage(const cv::Mat &img, int cannyLowThreshold, short numAngles, short minNumAngles, std::vector<PointCloud> &pointClouds);
 
 	~PointCloud();
 	
@@ -60,6 +62,11 @@ public:
 		return mExtension;
 	}
 	
+	const std::set<short>& angles() const 
+	{
+		return mAngles;
+	}
+	
 	void createSampler(short minArcLength);
 	
 	Sampler* sampler() const 
@@ -69,7 +76,7 @@ public:
 	
 	static const cv::Mat& edgeImg()  
 	{
-		return sEdgeImg;
+		return sEdgeImg; 
 	}
 	
 	static std::vector<Point*>& points() 
@@ -86,6 +93,7 @@ private:
 	cv::Rect2f mExtension;
 	cv::Point2f mCenter;
 	Sampler *mSampler;
+	std::set<short> mAngles;
 				
 	PointCloud(int numAngles);
 	

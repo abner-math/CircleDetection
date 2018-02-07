@@ -25,12 +25,15 @@ HoughCell::HoughCell(const cv::Rect2f &maxExtension, const cv::Point2f &center, 
 
 HoughCell::~HoughCell()
 {
-	for (size_t i = 0; i < mNumAccumulators; i++)
+	if (mAccumulators != NULL)
 	{
-		if (mAccumulators[i] != NULL)
-			delete mAccumulators[i];
+		for (size_t i = 0; i < mNumAccumulators; i++)
+		{
+			if (mAccumulators[i] != NULL)
+				delete mAccumulators[i];
+		}
+		delete[] mAccumulators;
 	}
-	delete[] mAccumulators;
 	for (size_t i = 0; i < 4; i++)
 	{
 		if (mChildren[i] != NULL)
@@ -51,13 +54,20 @@ std::set<HoughAccumulator*> HoughCell::addIntersectionsToChildren()
 			for (const Intersection &intersection : mAccumulators[i]->intersections())
 			{
 				HoughAccumulator *childAccumulator = addIntersection(intersection);
-				if (childAccumulator != NULL && childAccumulator->hasEllipseCandidate())
+				if (childAccumulator != NULL && childAccumulator->hasCandidate())
 				{
 					accumulators.insert(childAccumulator);
 				}
 			}
 		}
 	}
+	for (size_t i = 0; i < mNumAccumulators; i++)
+	{
+		if (mAccumulators[i] != NULL)
+			delete mAccumulators[i];
+	}
+	delete[] mAccumulators;
+	mAccumulators = NULL;
 	#ifdef _BENCHMARK
 		auto end = std::chrono::high_resolution_clock::now();
 		gTimeAddIntersectionsChildren += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();

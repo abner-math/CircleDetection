@@ -13,9 +13,9 @@ ImageUtils::ImageUtils(const cv::Mat &img, short numAngles, int cannyLowThreshol
 	, mAngleIndices(NULL)
 	, mGroups(NULL)
 {	
-	EdgeMap *edgeMap = DetectEdgesByEDPF(img.data, img.cols, img.rows);
-	mEdges = cv::Mat(img.size(), CV_8U, edgeMap->edgeImg);
-	//cv::Canny(img, mEdges, cannyLowThreshold, cannyLowThreshold * cannyRatio, cannyKernelSize);
+	//EdgeMap *edgeMap = DetectEdgesByEDPF(img.data, img.cols, img.rows);
+	//mEdges = cv::Mat(img.size(), CV_8U, edgeMap->edgeImg);
+	cv::Canny(img, mEdges, cannyLowThreshold, cannyLowThreshold * cannyRatio, cannyKernelSize);
 	createEdgeIndices();
 	//cv::GaussianBlur(img, mImg, cv::Size(5, 5), 0, 0);
 	createNormals();
@@ -174,7 +174,7 @@ int ImageUtils::groupPointsByAngle()
 				{
 					int neighbor = neighborIndex(index, i);
 					int edgeNeighbor = mEdgeIndices[neighbor];
-					if (isEdge(neighbor) && !marked[edgeNeighbor] && angleBetween(edgeSeed, edgeNeighbor) <= 5)
+					if (isEdge(neighbor) && !marked[edgeNeighbor] && angleBetween(edgeSeed, edgeNeighbor) <= 3)
 					{
 						marked[edgeNeighbor] = true;
 						mGroups[edgeNeighbor] = edgeSeed;
@@ -187,5 +187,10 @@ int ImageUtils::groupPointsByAngle()
 	}
 	delete[] marked;
 	return numGroups;
+	/*for (int edgeSeed = 0; edgeSeed < mNumEdges; edgeSeed++)
+	{
+		mGroups[edgeSeed] = edgeSeed;
+	}
+	return mNumEdges;*/
 }
 

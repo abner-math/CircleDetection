@@ -5,10 +5,20 @@
 
 #include "sampler.h"
 #include "circlefunctor.h"
+#include "EllipseFit.h"
+#include "CircleFit.h"
 
 struct Ellipse
 {
-	cv::RotatedRect ellipse;
+	cv::RotatedRect rect;
+	EllipseEquation equation;
+	bool falsePositive;
+};
+
+struct Circle
+{
+	cv::Point2f center;
+	float radius;
 	bool falsePositive;
 };
 
@@ -19,12 +29,6 @@ struct Intersection
 	size_t p2;
 	cv::Point2f position;
 	float dist;
-	float distFromCenter;
-	
-	bool operator<(const Intersection &other) const 
-	{
-		return dist < other.dist;
-	}
 };
 
 class HoughCell;
@@ -33,8 +37,6 @@ class HoughAccumulator
 {
 public:
 	HoughAccumulator(HoughCell *cell, float radius);
-	
-	~HoughAccumulator();
 	
 	HoughCell* cell()  
 	{
@@ -51,24 +53,34 @@ public:
 		return mIntersections;
 	}
 	
-	void accumulate(const Intersection &intersection);
-	
-	bool hasEllipseCandidate() const;
-	
-	Ellipse getEllipseCandidate();
-	
 	bool isVisited() const 
 	{
 		return mVisited;
 	}
 	
+	void setVisited()
+	{
+		mVisited = true;
+	}
+	
+	void accumulate(const Intersection &intersection);
+	
+	bool hasCandidate() const;
+	
+	Ellipse getEllipseCandidate();
+	
+	Circle getCircleCandidate();
+	
 private:
 	HoughCell *mCell;
 	float mRadius;
-	bool *mAngles;
-	size_t mNumAngles;
 	bool mVisited;
+	std::set<short> mAngles;
 	std::vector<Intersection> mIntersections;
+	std::vector<double> mPositionsX;
+	std::vector<double> mPositionsY;
+	
+	cv::RotatedRect ellipseEquationToRect(EllipseEquation &equation);
 	
 };
 

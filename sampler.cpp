@@ -12,7 +12,7 @@ Sampler::Sampler(const PointCloud &pointCloud, short minNumAngles)
 	, mMinNumAngles(minNumAngles)
 	, mNumAvailablePoints(0) 
 {  
-	if (numPoints() >= mMinNumAngles)
+	if (numPoints() >= mMinNumAngles && mPointCloud.angles().size() >= mMinNumAngles)
 	{
 		mPoints = new size_t[numPoints()];
 		std::iota(mPoints, mPoints + numPoints(), 0);
@@ -20,7 +20,6 @@ Sampler::Sampler(const PointCloud &pointCloud, short minNumAngles)
 		mStartingIndicesPerAngle[lastAngle] = 0;
 		mCurrentIndexInAngle[lastAngle] = 0;
 		size_t count = 0;
-		mAngles.push_back(lastAngle);
 		for (size_t i = 0; i < numPoints(); i++)
 		{
 			short angle = angleIndex(i);
@@ -31,7 +30,6 @@ Sampler::Sampler(const PointCloud &pointCloud, short minNumAngles)
 				mCountPointsPerAngle[lastAngle] = count;
 				count = 1;
 				lastAngle = angle;
-				mAngles.push_back(angle);
 			}
 			else
 			{
@@ -39,9 +37,25 @@ Sampler::Sampler(const PointCloud &pointCloud, short minNumAngles)
 			}
 		}
 		mCountPointsPerAngle[lastAngle] = count;
-		mCurrentAngle = mAngles.begin();
+		mCurrentAngle = mPointCloud.angles().begin();
 		mNumAvailablePoints = numPoints();
 		mNumPicks = (size_t*)calloc(numPoints(), sizeof(size_t));
+		for (const short &angle1 : mPointCloud.angles())
+		{
+			short maxDist = 0;
+			short maxAngle = angle1;
+			for (const short &angle2 : mPointCloud.angles())
+			{
+				short diff = std::abs(angle1 - angle2);
+				short dist = std::min(diff, (short)(mPointCloud.numAngles() - diff));
+				if (dist > maxDist)
+				{
+					maxDist = dist;
+					maxAngle = angle2;
+				}
+			}
+			mOppositeAngles[angle1] = maxAngle;
+		}
 	}
 }
 
@@ -56,7 +70,7 @@ Sampler::~Sampler()
 
 bool Sampler::canSample() const 
 {
-	return numAvailablePoints() >= mMinNumAngles && mAngles.size() >= mMinNumAngles;
+	return numAvailablePoints() >= mMinNumAngles && mPointCloud.angles().size() >= mMinNumAngles;
 }
 
 std::pair<size_t, size_t> Sampler::sample()  
@@ -116,17 +130,20 @@ size_t Sampler::selectRandomPointFromAngle(short angle)
 
 size_t Sampler::selectRandomPoint()  
 {
-	size_t point = selectRandomPointFromAngle(*mCurrentAngle);
-	if (++mCurrentAngle == mAngles.end())
-		mCurrentAngle = mAngles.begin();
+	size_t point = getValidPoint(mPoints[mStartingIndicesPerAngle[*mCurrentAngle] + mCurrentIndexInAngle[*mCurrentAngle]]);
+	mCurrentIndexInAngle[*mCurrentAngle] = (mCurrentIndexInAngle[*mCurrentAngle] + 1) % mCountPointsPerAngle[*mCurrentAngle];
+	//size_t point = selectRandomPointFromAngle(*mCurrentAngle);
+	if (++mCurrentAngle == mPointCloud.angles().end())
+		mCurrentAngle = mPointCloud.angles().begin();
 	return point;
 }
 
 size_t Sampler::selectAnotherRandomPoint(size_t point)
 {
-	short angle = std::find(mAngles.begin(), mAngles.end(), angleIndex(point)) - mAngles.begin();
-	short randomAngle = (short)(getRandomValueFromExponentialDist() * mAngles.size());
-	short orthogonalAngle = mAngles[(randomAngle + angle + mAngles.size() / 2) % mAngles.size()];
-	return selectRandomPointFromAngle(orthogonalAngle);
+	return mPoints[mStartingIndicesPerAngle[mOppositeAngles[angleIndex(point)]]];
+	//short angle = std::find(mAngles.begin(), mAngles.end(), angleIndex(point)) - mAngles.begin();
+	//short randomAngle = (short)(getRandomValueFromExponentialDist() * mAngles.size());
+	//short orthogonalAngle = mAngles[(randomAngle + angle + mAngles.size() / 2) % mAngles.size()];
+	//return selectRandomPointFromAngle(orthogonalAngle);
 }
 	
