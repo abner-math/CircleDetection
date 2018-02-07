@@ -14,13 +14,14 @@
 
 #define NUM_ANGLES 60
 #define MIN_NUM_ANGLES 15 // 45 degrees 
+#define MAX_DEPTH 10
 
 std::string gEdgeWindowName = "Edge image";
 int gCannyLowThreshold;
 cv::Mat gImg;
 cv::Mat gImgGray;
 cv::Mat gFrame;
-int gMaxDepth;
+float gPrecision;
 
 #ifdef _BENCHMARK
 double gTimeProcessImage;
@@ -158,11 +159,11 @@ void displayInteractiveFrame(const std::vector<PointCloud*> &pointClouds, const 
 		{
 			if (sampler->isRemoved(i))
 			{
-				drawPoint(pointCloud->group(i).position, cv::Scalar(0, 0, 255));
+				drawPoint(pointCloud->point(i).position, cv::Scalar(0, 0, 255));
 			}
 			else
 			{
-				drawPoint(pointCloud->group(i).position, cv::Scalar(255, 255, 255));
+				drawPoint(pointCloud->point(i).position, cv::Scalar(255, 255, 255));
 			}
 		}
 	}
@@ -251,6 +252,7 @@ size_t removePoints(const HoughCell *cell, const std::vector<PointCloud*> &point
 					point->pointCloud->sampler()->removePoint(point->index);
 					++count;
 				}
+				PointCloud::edgeImg().data[index_] = 0;
 			}
 			++index;
 		} 
@@ -273,7 +275,7 @@ cv::Point2i getCenteredCircle(const cv::Rect2i &boundingRect, const Circle &circ
 
 size_t removeCirclePoints(const HoughCell *cell, const std::vector<PointCloud*> &pointClouds, const Circle &circle)
 {
-	int thickness = (int)cell->size();//std::max((int)cell->size(), (int)circle.radius / 10);
+	int thickness = (int)circle.radius / 10;//std::max((int)cell->size(), (int)circle.radius / 10);
 	cv::Rect2i boundingRect = getCircleBoundingRect(PointCloud::edgeImg(), circle, thickness);
 	cv::Mat referenceImg = cv::Mat::zeros(boundingRect.size(), CV_8U);
 	cv::Point2i newCenter = getCenteredCircle(boundingRect, circle);
@@ -300,7 +302,7 @@ cv::RotatedRect getCenteredEllipse(const cv::Rect2i &boundingRect, const Ellipse
 
 size_t removeEllipsePoints(const HoughCell *cell, const std::vector<PointCloud*> &pointClouds, const Ellipse &ellipse)
 {
-	int thickness = (int)cell->size();//std::max((int)cell->size(), (int)std::min(ellipse.rect.size.width, ellipse.rect.size.height) / 10);
+	int thickness = (int)std::min(ellipse.rect.size.width, ellipse.rect.size.height) / 10;//std::max((int)cell->size(), (int)std::min(ellipse.rect.size.width, ellipse.rect.size.height) / 10);
 	cv::Rect2i boundingRect = getEllipseBoundingRect(PointCloud::edgeImg(), ellipse, thickness);
 	cv::Mat referenceImg = cv::Mat::zeros(boundingRect.size(), CV_8U);
 	cv::RotatedRect newEllipse = getCenteredEllipse(boundingRect, ellipse);
@@ -327,7 +329,8 @@ bool isFalsePositive(Ellipse &ellipse)
 	
 	cv::Mat resultImg = referenceImg & croppedEdgeImg;
 	double value = cv::sum(resultImg)[0] / 255.0 / perimeter;
-	return value < 0.5f;
+	ellipse.confidence = value;
+	return value < gPrecision;
 }
 
 bool isFalsePositive(Circle &circle)
@@ -344,7 +347,70 @@ bool isFalsePositive(Circle &circle)
 	
 	cv::Mat resultImg = referenceImg & croppedEdgeImg;
 	double value = cv::sum(resultImg)[0] / 255.0 / perimeter;
-	return value < 0.5f;
+	circle.confidence = value;
+	return value < gPrecision;
+}
+
+bool checkForCirclesAndEllipses(HoughCell *parentCell, HoughCell *cell, HoughAccumulator *accumulator, const std::vector<PointCloud*> &pointClouds,
+	std::vector<Circle> &circles, std::vector<Ellipse> &ellipses)
+{
+	#ifdef _BENCHMARK
+		auto begin = std::chrono::high_resolution_clock::now();
+	#endif
+	Circle circle = accumulator->getCircleCandidate();
+	#ifdef _BENCHMARK
+		auto end = std::chrono::high_resolution_clock::now();
+		gTimeAddEllipse += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+		begin = std::chrono::high_resolution_clock::now();
+	#endif 
+	circle.falsePositive = isFalsePositive(circle);
+	#ifdef _BENCHMARK
+		end = std::chrono::high_resolution_clock::now();
+		gTimeRemoveFalsePositive += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+		begin = std::chrono::high_resolution_clock::now();
+	#endif
+	if (!circle.falsePositive)
+	{
+		removeCirclePoints(cell, pointClouds, circle);
+		#ifdef _BENCHMARK
+			end = std::chrono::high_resolution_clock::now();
+			gTimeRemoveEllipsePoints += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+		#endif
+		circles.push_back(circle);
+		#ifdef _DEBUG_INTERACTIVE
+			displayInteractiveFrame(pointClouds, parentCell, accumulator, circles, ellipses);
+		#endif
+		return true;
+	}
+	else
+	{
+		Ellipse ellipse = accumulator->getEllipseCandidate();
+		#ifdef _BENCHMARK
+			end = std::chrono::high_resolution_clock::now();
+			gTimeAddEllipse += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+			begin = std::chrono::high_resolution_clock::now();
+		#endif 
+		ellipse.falsePositive = isFalsePositive(ellipse);
+		#ifdef _BENCHMARK
+			end = std::chrono::high_resolution_clock::now();
+			gTimeRemoveFalsePositive += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+			begin = std::chrono::high_resolution_clock::now();
+		#endif
+		if (!ellipse.falsePositive)
+		{
+			removeEllipsePoints(cell, pointClouds, ellipse);
+			#ifdef _BENCHMARK
+				end = std::chrono::high_resolution_clock::now();
+				gTimeRemoveEllipsePoints += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+			#endif
+			ellipses.push_back(ellipse);
+			#ifdef _DEBUG_INTERACTIVE
+				displayInteractiveFrame(pointClouds, parentCell, accumulator, circles, ellipses);
+			#endif
+			return true;
+		}
+	}
+	return false;
 }
 
 void subdivide(HoughCell *parentCell, HoughAccumulator *accumulator, const std::vector<PointCloud*> &pointClouds, 
@@ -352,7 +418,11 @@ void subdivide(HoughCell *parentCell, HoughAccumulator *accumulator, const std::
 {
 	HoughCell *cell = accumulator->cell();
 	cell->setVisited();
-	if (cell->depth() < gMaxDepth)
+	if (cell->depth() > 2)
+	{
+		checkForCirclesAndEllipses(parentCell, cell, accumulator, pointClouds, circles, ellipses);
+	}
+	if (cell->depth() < MAX_DEPTH)
 	{
 		for (HoughAccumulator *childAccumulator : cell->addIntersectionsToChildren())
 		{
@@ -360,74 +430,6 @@ void subdivide(HoughCell *parentCell, HoughAccumulator *accumulator, const std::
 				displayInteractiveFrame(pointClouds, parentCell, accumulator, circles, ellipses);
 			#endif
 			subdivide(parentCell, childAccumulator, pointClouds, circles, ellipses);
-		}
-	}        
-	else
-	{
-		#ifdef _BENCHMARK
-			auto begin = std::chrono::high_resolution_clock::now();
-		#endif
-		Circle circle = accumulator->getCircleCandidate();
-		#ifdef _BENCHMARK
-			auto end = std::chrono::high_resolution_clock::now();
-			gTimeAddEllipse += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
-			begin = std::chrono::high_resolution_clock::now();
-		#endif 
-		circle.falsePositive = isFalsePositive(circle);
-		#ifdef _BENCHMARK
-			end = std::chrono::high_resolution_clock::now();
-			gTimeRemoveFalsePositive += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
-			begin = std::chrono::high_resolution_clock::now();
-		#endif
-		if (!circle.falsePositive)
-		{
-			removeCirclePoints(cell, pointClouds, circle);
-			#ifdef _BENCHMARK
-				end = std::chrono::high_resolution_clock::now();
-				gTimeRemoveEllipsePoints += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
-			#endif
-			circles.push_back(circle);
-			#ifdef _DEBUG_INTERACTIVE
-				displayInteractiveFrame(pointClouds, parentCell, accumulator, circles, ellipses);
-			#endif
-		}
-		else
-		{
-			Ellipse ellipse = accumulator->getEllipseCandidate();
-			#ifdef _BENCHMARK
-				end = std::chrono::high_resolution_clock::now();
-				gTimeAddEllipse += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
-				begin = std::chrono::high_resolution_clock::now();
-			#endif 
-			ellipse.falsePositive = isFalsePositive(ellipse);
-			#ifdef _BENCHMARK
-				end = std::chrono::high_resolution_clock::now();
-				gTimeRemoveFalsePositive += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
-				begin = std::chrono::high_resolution_clock::now();
-			#endif
-			if (!ellipse.falsePositive)
-			{
-				removeEllipsePoints(cell, pointClouds, ellipse);
-				#ifdef _BENCHMARK
-					end = std::chrono::high_resolution_clock::now();
-					gTimeRemoveEllipsePoints += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
-				#endif
-				ellipses.push_back(ellipse);
-				#ifdef _DEBUG_INTERACTIVE
-					displayInteractiveFrame(pointClouds, parentCell, accumulator, circles, ellipses);
-				#endif
-			}
-			else
-			{
-				#ifdef _DEBUG_INTERACTIVE
-					circles.push_back(circle);
-					displayInteractiveFrame(pointClouds, parentCell, accumulator, circles, ellipses);
-					circles.erase(circles.begin() + circles.size() - 1);
-					ellipses.push_back(ellipse);
-					displayInteractiveFrame(pointClouds, parentCell, accumulator, circles, ellipses);
-					ellipses.erase(ellipses.begin() + ellipses.size() - 1);
-				#endif
-			}	
 		}
 	}
 }
@@ -523,7 +525,7 @@ void cannyCallback(int slider, void *userData)
 					<< "\tTime to calculate intersections: " << gTimeIntersection / 1e6 << "ms (" << gTimeIntersection / durationDetection * 100 << "%)" << std::endl
 					<< "\tTime to add intersections: " << gTimeAddIntersection / 1e6 << "ms (" << gTimeAddIntersection / durationDetection * 100 << "%)" << std::endl
 					<< "\tTime to add intersections to children: " << gTimeAddIntersectionsChildren / 1e6 << "ms (" << gTimeAddIntersectionsChildren / durationDetection * 100 << "%)" << std::endl
-					<< "\tTime to add circles and ellipses: " << gTimeAddEllipse / 1e6 << "ms (" << gTimeAddEllipse / durationDetection * 100 << "%)" << std::endl
+					<< "\tTime to fit circles and ellipses: " << gTimeAddEllipse / 1e6 << "ms (" << gTimeAddEllipse / durationDetection * 100 << "%)" << std::endl
 					<< "\tTime to remove points: " << gTimeRemoveEllipsePoints / 1e6 << "ms (" << gTimeRemoveEllipsePoints / durationDetection * 100 << "%)" << std::endl
 					<< "\tTime to remove false positives: " << gTimeRemoveFalsePositive / 1e6 << "ms (" << gTimeRemoveFalsePositive / durationDetection * 100 << "%)" << std::endl
 					<< "\tExplained: " << (gTimeSample1 + gTimeSample2 + gTimeIntersection + gTimeAddIntersection + gTimeAddIntersectionsChildren + gTimeAddEllipse + gTimeRemoveEllipsePoints + gTimeRemoveFalsePositive) / durationDetection * 100 << "%" << std::endl;
@@ -573,14 +575,14 @@ int main(int argc, char **argv)
 {
 	if (argc < 4)
 	{
-		std::cerr << "Usage: ARHT <INPUT_IMAGE> <CANNY_MIN_THRESHOLD> <MAX_DEPTH>" << std::endl;
+		std::cerr << "Usage: ARHT <INPUT_IMAGE> <CANNY_MIN_THRESHOLD> <PRECISION>" << std::endl;
 		return -1;
 	}
 	std::string inputFilename(argv[1]);
 	gImg = cv::imread(inputFilename);
 	cv::cvtColor(gImg, gImgGray, CV_BGR2GRAY);
 	gCannyLowThreshold = atoi(argv[2]);
-	gMaxDepth = atoi(argv[3]);
+	gPrecision = atof(argv[3]);
 	
 	if (!gImg.data)
 	{

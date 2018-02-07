@@ -136,7 +136,7 @@ int ImageUtils::createConnectedComponents()
 				{
 					int neighbor = neighborIndex(index, i);
 					int edgeNeighbor = mEdgeIndices[neighbor];
-					if (isEdge(neighbor) && !marked[edgeNeighbor] && mNeighborAngles[edgeNeighbor * 8 + 7 - i] <= 20)
+					if (isEdge(neighbor) && !marked[edgeNeighbor] && mNeighborAngles[edgeNeighbor * 8 + 7 - i] < 20)
 					{
 						marked[edgeNeighbor] = true;
 						mLabels[edgeNeighbor] = numLabels;

@@ -13,6 +13,7 @@ struct Ellipse
 	cv::RotatedRect rect;
 	EllipseEquation equation;
 	bool falsePositive;
+	float confidence;
 };
 
 struct Circle
@@ -20,6 +21,7 @@ struct Circle
 	cv::Point2f center;
 	float radius;
 	bool falsePositive;
+	float confidence;
 };
 
 struct Intersection

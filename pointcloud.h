@@ -64,7 +64,7 @@ public:
 		return mSampler;
 	}
 	
-	static const cv::Mat& edgeImg()  
+	static cv::Mat& edgeImg()  
 	{
 		return sEdgeImg; 
 	}
