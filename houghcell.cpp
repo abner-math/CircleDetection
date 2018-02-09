@@ -21,13 +21,6 @@ HoughCell::HoughCell(const cv::Rect2f &maxExtension, const cv::Point2f &center, 
 	{
 		mAccumulators[i] = NULL;
 	}
-	float newSize = mSize / 2;
-	mCenters = new cv::Point2f[4];
-	mCenters[0] = cv::Point2f(mCenter.x - newSize, mCenter.y - newSize);
-	mCenters[1] = cv::Point2f(mCenter.x - newSize, mCenter.y + newSize);
-	mCenters[2] = cv::Point2f(mCenter.x + newSize, mCenter.y - newSize);
-	mCenters[3] = cv::Point2f(mCenter.x + newSize, mCenter.y + newSize);
-	mThreshold = newSize * std::sqrt(2);
 }
 
 HoughCell::~HoughCell()
@@ -41,7 +34,6 @@ HoughCell::~HoughCell()
 		}
 		delete[] mAccumulators;
 	}
-	delete[] mCenters;
 	for (size_t i = 0; i < 4; i++)
 	{
 		if (mChildren[i] != NULL)
@@ -104,19 +96,29 @@ void HoughCell::addIntersection(const Intersection &intersection, std::set<Hough
 	}
 	else
 	{
-		for (size_t i = 0; i < 4; i++)
+		size_t childIndex = ((intersection.position.x > mCenter.x) << 1) | (intersection.position.y > mCenter.y);
+		if (mChildren[childIndex] == NULL)
 		{
-			float dist = norm(intersection.position - mCenters[i]);
-			if (dist < mThreshold)
+			float newSize = mSize / 2;
+			cv::Point2f center;
+			switch (childIndex)
 			{
-				if (mChildren[i] == NULL)
-				{
-					mChildren[i] = new HoughCell(mMaxExtension, mCenters[i], mSize / 2, mNumAngles, mMinNumAngles);
-					mChildren[i]->mDepth = mDepth + 1;
-				}
-				mChildren[i]->addIntersection(intersection, accumulators);
+				case 0:
+					center = cv::Point2f(mCenter.x - newSize, mCenter.y - newSize);
+					break;
+				case 1:
+					center = cv::Point2f(mCenter.x - newSize, mCenter.y + newSize);
+					break;
+				case 2:
+					center = cv::Point2f(mCenter.x + newSize, mCenter.y - newSize);
+					break;
+				case 3:
+					center = cv::Point2f(mCenter.x + newSize, mCenter.y + newSize);
 			}
+			mChildren[childIndex] = new HoughCell(mMaxExtension, center, newSize, mNumAngles, mMinNumAngles);
+			mChildren[childIndex]->mDepth = mDepth + 1;
 		}
+		mChildren[childIndex]->addIntersection(intersection, accumulators);
 	}
 }
 	

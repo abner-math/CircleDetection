@@ -80,9 +80,7 @@ private:
 	HoughCell *mChildren[4];
 	cv::Rect2f mMaxExtension;
 	cv::Point2f mCenter;
-	cv::Point2f *mCenters;
 	float mSize;
-	float mThreshold;
 	short mNumAngles;
 	short mMinNumAngles;
 	bool mVisited;

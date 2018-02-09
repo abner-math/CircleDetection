@@ -1,4 +1,4 @@
-#define _DEBUG_INTERACTIVE
+//#define _DEBUG_INTERACTIVE
 
 #include <iostream>
 #include <map>
@@ -63,10 +63,10 @@ void drawLine(const cv::Point2f &p1, const cv::Point2f &p2, cv::Scalar color = c
 
 void drawRect(const cv::Rect2f &rect, cv::Scalar color = cv::Scalar(255, 255, 255))
 {
-	//cv::Rect2i r((int)rect.x, (int)rect.y, (int)rect.width, (int)rect.height);
-	//cv::rectangle(gFrame, r, color);
-	float size = rect.width / 2 * std::sqrt(2);
-	cv::circle(gFrame, cv::Point2i((int)(rect.x + rect.width / 2), (int)(rect.y + rect.height / 2)), (int)size, color);
+	cv::Rect2i r((int)rect.x, (int)rect.y, (int)rect.width, (int)rect.height);
+	cv::rectangle(gFrame, r, color);
+	//float size = rect.width / 2 * std::sqrt(2);
+	//cv::circle(gFrame, cv::Point2i((int)(rect.x + rect.width / 2), (int)(rect.y + rect.height / 2)), (int)size, color);
 }
 
 void drawCircle(const Circle &circle, cv::Scalar color = cv::Scalar(255, 255, 255), int thickness = 2)
