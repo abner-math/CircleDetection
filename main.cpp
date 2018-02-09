@@ -1,4 +1,4 @@
-//#define _DEBUG_INTERACTIVE
+#define _DEBUG_INTERACTIVE
 
 #include <iostream>
 #include <map>
@@ -63,8 +63,10 @@ void drawLine(const cv::Point2f &p1, const cv::Point2f &p2, cv::Scalar color = c
 
 void drawRect(const cv::Rect2f &rect, cv::Scalar color = cv::Scalar(255, 255, 255))
 {
-	cv::Rect2i r((int)rect.x, (int)rect.y, (int)rect.width, (int)rect.height);
-	cv::rectangle(gFrame, r, color);
+	//cv::Rect2i r((int)rect.x, (int)rect.y, (int)rect.width, (int)rect.height);
+	//cv::rectangle(gFrame, r, color);
+	float size = rect.width / 2 * std::sqrt(2);
+	cv::circle(gFrame, cv::Point2i((int)(rect.x + rect.width / 2), (int)(rect.y + rect.height / 2)), (int)size, color);
 }
 
 void drawCircle(const Circle &circle, cv::Scalar color = cv::Scalar(255, 255, 255), int thickness = 2)
@@ -275,7 +277,7 @@ cv::Point2i getCenteredCircle(const cv::Rect2i &boundingRect, const Circle &circ
 
 size_t removeCirclePoints(const HoughCell *cell, const std::vector<PointCloud*> &pointClouds, const Circle &circle)
 {
-	int thickness = (int)circle.radius / 10;//std::max((int)cell->size(), (int)circle.radius / 10);
+	int thickness = 5;//(int)circle.radius / 10;//std::max((int)cell->size(), (int)circle.radius / 10);
 	cv::Rect2i boundingRect = getCircleBoundingRect(PointCloud::edgeImg(), circle, thickness);
 	cv::Mat referenceImg = cv::Mat::zeros(boundingRect.size(), CV_8U);
 	cv::Point2i newCenter = getCenteredCircle(boundingRect, circle);
@@ -302,7 +304,7 @@ cv::RotatedRect getCenteredEllipse(const cv::Rect2i &boundingRect, const Ellipse
 
 size_t removeEllipsePoints(const HoughCell *cell, const std::vector<PointCloud*> &pointClouds, const Ellipse &ellipse)
 {
-	int thickness = (int)std::min(ellipse.rect.size.width, ellipse.rect.size.height) / 10;//std::max((int)cell->size(), (int)std::min(ellipse.rect.size.width, ellipse.rect.size.height) / 10);
+	int thickness = 5;//(int)std::min(ellipse.rect.size.width, ellipse.rect.size.height) / 10;//std::max((int)cell->size(), (int)std::min(ellipse.rect.size.width, ellipse.rect.size.height) / 10);
 	cv::Rect2i boundingRect = getEllipseBoundingRect(PointCloud::edgeImg(), ellipse, thickness);
 	cv::Mat referenceImg = cv::Mat::zeros(boundingRect.size(), CV_8U);
 	cv::RotatedRect newEllipse = getCenteredEllipse(boundingRect, ellipse);
@@ -384,6 +386,11 @@ bool checkForCirclesAndEllipses(HoughCell *parentCell, HoughCell *cell, HoughAcc
 	}
 	else
 	{
+		#ifdef _DEBUG_INTERACTIVE
+			circles.push_back(circle);
+			displayInteractiveFrame(pointClouds, parentCell, accumulator, circles, ellipses);
+			circles.erase(circles.begin() + circles.size() - 1);
+		#endif
 		Ellipse ellipse = accumulator->getEllipseCandidate();
 		#ifdef _BENCHMARK
 			end = std::chrono::high_resolution_clock::now();
@@ -409,6 +416,14 @@ bool checkForCirclesAndEllipses(HoughCell *parentCell, HoughCell *cell, HoughAcc
 			#endif
 			return true;
 		}
+		else
+		{
+			#ifdef _DEBUG_INTERACTIVE
+				ellipses.push_back(ellipse);
+				displayInteractiveFrame(pointClouds, parentCell, accumulator, circles, ellipses);
+				ellipses.erase(ellipses.begin() + ellipses.size() - 1);
+			#endif
+		}
 	}
 	return false;
 }
@@ -424,16 +439,85 @@ void subdivide(HoughCell *parentCell, HoughAccumulator *accumulator, const std::
 	}
 	if (cell->depth() < MAX_DEPTH)
 	{
-		for (HoughAccumulator *childAccumulator : cell->addIntersectionsToChildren())
+		std::set<HoughAccumulator*> accumulators;
+		cell->addIntersectionsToChildren(accumulators);
+		for (HoughAccumulator *childAccumulator : accumulators)
 		{
-			#ifdef _DEBUG_INTERACTIVE
-				displayInteractiveFrame(pointClouds, parentCell, accumulator, circles, ellipses);
-			#endif
-			subdivide(parentCell, childAccumulator, pointClouds, circles, ellipses);
+			if (childAccumulator->hasCandidate())
+			{
+				#ifdef _DEBUG_INTERACTIVE
+					displayInteractiveFrame(pointClouds, parentCell, accumulator, circles, ellipses);
+				#endif
+				subdivide(parentCell, childAccumulator, pointClouds, circles, ellipses);
+			}
 		}
 	}
 }
  
+bool intersectionBetweenPoints(Sampler *sampler, const std::pair<size_t, size_t> &sample, const cv::Rect &maxExtension, Intersection &intersection)
+{
+	#ifdef _BENCHMARK
+		auto begin = std::chrono::high_resolution_clock::now();
+	#endif
+	const Point &p1 = sampler->pointCloud().point(sample.first);
+	const Point &p2 = sampler->pointCloud().point(sample.second);
+	
+	cv::Point2f a = p1.position;
+	cv::Point2f b = p1.position + p1.normal;
+	cv::Point2f c = p2.position;
+	cv::Point2f d = p2.position + p2.normal;
+
+	// Get (a, b, c) of the first line 
+	float a1 = b.y - a.y;
+	float b1 = a.x - b.x;
+	float c1 = a1 * a.x + b1 * a.y;
+
+	// Get (a, b, c) of the second line
+	float a2 = d.y - c.y;
+	float b2 = c.x - d.x;
+	float c2 = a2 * c.x + b2 * c.y;
+
+	// Get delta and check if the lines are parallel
+	float delta = a1 * b2 - a2 * b1;
+	if (std::abs(delta) < std::numeric_limits<float>::epsilon())
+	{
+		#ifdef _BENCHMARK
+			auto end = std::chrono::high_resolution_clock::now();
+			gTimeIntersection += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+		#endif 
+		return false;
+	}
+
+	float x = (b2 * c1 - b1 * c2) / delta;
+	float y = (a1 * c2 - a2 * c1) / delta;
+	cv::Point2f position(x, y);
+	
+	// Check if intersection falls on valid range 
+	if (!maxExtension.contains(position))
+	{
+		#ifdef _BENCHMARK
+			auto end = std::chrono::high_resolution_clock::now();
+			gTimeIntersection += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+		#endif 
+		return false;
+	}
+	
+	float dist1 = norm(a - position);
+	float dist2 = norm(c - position);
+	float dist = (dist1 + dist2) / 2;
+	
+	intersection.sampler = sampler;
+	intersection.p1 = sample.first;
+	intersection.p2 = sample.second;
+	intersection.position = position; 
+	intersection.dist = dist;
+	#ifdef _BENCHMARK
+		auto end = std::chrono::high_resolution_clock::now();
+		gTimeIntersection += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+	#endif 
+	return true;
+}
+
 void findCirclesAndEllipses(HoughCell *cell, const std::vector<PointCloud*> &pointClouds, std::vector<Circle> &circles, std::vector<Ellipse> &ellipses)
 {
 	for (const PointCloud *pointCloud : pointClouds)
@@ -442,15 +526,28 @@ void findCirclesAndEllipses(HoughCell *cell, const std::vector<PointCloud*> &poi
 		Sampler *sampler = pointCloud->sampler();
 		while (sampler->canSample())
 		{
-			HoughAccumulator *accumulator = cell->addIntersection(sampler);
-			if (accumulator != NULL)
+			std::pair<size_t, size_t> sample = sampler->sample();
+			Intersection intersection;
+			if (intersectionBetweenPoints(sampler, sample, cell->maxExtension(), intersection))
 			{
-				#ifdef _DEBUG_INTERACTIVE
-					displayInteractiveFrame(pointClouds, cell, accumulator, circles, ellipses);
+				#ifdef _BENCHMARK
+					auto begin = std::chrono::high_resolution_clock::now();
 				#endif
-				if (accumulator->hasCandidate())
+				std::set<HoughAccumulator*> accumulators;
+				cell->addIntersection(intersection, accumulators);
+				#ifdef _BENCHMARK
+					auto end = std::chrono::high_resolution_clock::now();
+					gTimeAddIntersection += std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
+				#endif 
+				for (HoughAccumulator *accumulator : accumulators)
 				{
-					subdivide(cell, accumulator, pointClouds, circles, ellipses);
+					#ifdef _DEBUG_INTERACTIVE
+						displayInteractiveFrame(pointClouds, cell, accumulator, circles, ellipses);
+					#endif
+					if (accumulator->hasCandidate())
+					{
+						subdivide(cell, accumulator, pointClouds, circles, ellipses);
+					}
 				}
 			}
 		}

@@ -12,11 +12,22 @@ ImageUtils::ImageUtils(const cv::Mat &img, short numAngles, int cannyLowThreshol
 	, mLabels(NULL)
 	, mAngleIndices(NULL)
 {	
+	/*cv::Mat blurred; double sigma = 1, threshold = 5, amount = 1;
+	cv::GaussianBlur(mImg, blurred, cv::Size(), sigma, sigma);
+	cv::Mat lowContrastMask = abs(mImg - blurred) < threshold;
+	cv::Mat sharpened = mImg*(1+amount) + blurred*(-amount);
+	mImg.copyTo(sharpened, lowContrastMask);
+	mImg = sharpened;*/
+
 	//EdgeMap *edgeMap = DetectEdgesByEDPF(img.data, img.cols, img.rows);
 	//mEdges = cv::Mat(img.size(), CV_8U, edgeMap->edgeImg);
 	cv::Canny(mImg, mEdges, cannyLowThreshold, cannyLowThreshold * cannyRatio, cannyKernelSize);
 	createEdgeIndices();
 	//cv::GaussianBlur(mImg, mImg, cv::Size(5, 5), 0, 0);
+
+	cv::Mat blur;
+	cv::GaussianBlur(mImg, blur, cv::Size(0, 0), 3);
+	cv::addWeighted(mImg, 1.5, blur, -0.5, 0, blur);
 	createNormals();
 	calculateAngleIndices();
 }

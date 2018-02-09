@@ -72,15 +72,17 @@ public:
 		mVisited = true;
 	}
 	
-	std::set<HoughAccumulator*> addIntersectionsToChildren();
+	void addIntersectionsToChildren(std::set<HoughAccumulator*> &accumulators);
 	
-	HoughAccumulator* addIntersection(Sampler *sampler);
+	void addIntersection(const Intersection &intersection, std::set<HoughAccumulator*> &accumulators);
 	
 private:
 	HoughCell *mChildren[4];
 	cv::Rect2f mMaxExtension;
 	cv::Point2f mCenter;
+	cv::Point2f *mCenters;
 	float mSize;
+	float mThreshold;
 	short mNumAngles;
 	short mMinNumAngles;
 	bool mVisited;
@@ -88,11 +90,7 @@ private:
 	size_t mDepth;
 	HoughAccumulator **mAccumulators;
 		
-	bool intersectionBetweenPoints(Sampler *sampler, const std::pair<size_t, size_t> &sample, Intersection &intersection);
-
 	HoughAccumulator* accumulate(const Intersection &intersection);
-	
-	HoughAccumulator* addIntersection(const Intersection &intersection);
 	
 };
 
